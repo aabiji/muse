@@ -1,37 +1,29 @@
-mod client;
+use std::io::prelude::*;
+use std::net::TcpStream;
+
 mod server;
 
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-enum PlaybackOrder {
-    Random,
-    Alphabetical,
-}
-
-#[derive(Deserialize)]
-struct Config {
-    audio_folder_path: String,
-    continue_playback: bool,
-    playback_order: PlaybackOrder,
-}
-
-fn load_config() -> Config {
-    let path = "config.toml";
-    let file = std::fs::read_to_string(path).unwrap();
-    let config: Config = toml::from_str(&file).unwrap();
-    config
-}
+const MSG_SIZE: usize = 256;
+const SERVER_ADDR: &str = "127.0.0.1:1234";
 
 fn main() {
-    let mut client = client::Client{};
-    let mut server = server::Server{};
-    let config = load_config();
+    let mut server = server::Server::new();
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "--server-mode" {
-        server.start(&config); 
-    } else {
-        client.start(&config);
+        server.start();
+        return;
     }
+
+    server::spawn_if_not_spawned();
+
+    let msg = "Hello! This is a test request!";
+    let mut conn = TcpStream::connect(SERVER_ADDR).unwrap();
+    conn.write(msg.as_bytes()).unwrap();
+
+    let mut response: [u8; MSG_SIZE] = [0; MSG_SIZE];
+    conn.read(&mut response).unwrap();
+
+    let msg = String::from_utf8(response.to_vec()).unwrap();
+    println!("{}", msg);
 }
