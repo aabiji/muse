@@ -7,6 +7,6 @@ edition = "2021"
 symphonia = "0.5.3"
 rodio = "0.17.3"
 cpal = "0.15.2"
-tarpc = "0.34.0"
 toml = "0.8.8"
+serde_json = "1.0.111"
 serde = { version = "1.0.195", features = ["derive"] }
