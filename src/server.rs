@@ -1,7 +1,11 @@
-use serde::Deserialize;
 use std::io::prelude::*;
-use std::net::{TcpListener, TcpStream};
 use std::process::Command;
+use serde::{Serialize, Deserialize};
+use std::net::{TcpListener, TcpStream};
+
+pub const MSG_SIZE: usize = 256;
+pub const ADDR: &str = "127.0.0.1:1234";
+pub const SERVER_MODE_FLAG: &str = "--server-mode";
 
 #[derive(Deserialize)]
 enum PlaybackOrder {
@@ -23,6 +27,18 @@ fn load_config() -> Config {
     config
 }
 
+#[derive(Serialize, Deserialize)]
+pub enum Request {
+    Start, // Start audio playback
+    Stop,  // Stop audio playback
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum Response {
+    Success(String),
+    Error(String),
+}
+
 pub struct Server {
     config: Config,
 }
@@ -34,37 +50,45 @@ impl Server {
         }
     }
 
-    fn handle_client(&mut self, mut stream: TcpStream) {
-        let mut buffer: [u8; crate::MSG_SIZE] = [0; crate::MSG_SIZE];
-        let amount_read = stream.read(&mut buffer).unwrap();
-        if amount_read != crate::MSG_SIZE {
-            // houston we have a problem
-        }
-
-        let msg = String::from_utf8(buffer.to_vec()).unwrap();
-        println!("{}", msg);
-
-        let response = "Hello! This is a test response!";
-        stream.write(response.as_bytes()).unwrap();
-    }
-
     pub fn start(&mut self) {
-        println!("Starting server ...");
-        let listener = TcpListener::bind(crate::SERVER_ADDR).unwrap();
+        let listener = TcpListener::bind(ADDR).unwrap();
         for stream in listener.incoming() {
-            self.handle_client(stream.unwrap());
+            self.exec_client_request(stream.unwrap());
         }
     }
+
+    fn start_playback(&self) -> Response {
+        Response::Success("Start playing music".to_string())
+    }
+
+    fn stop_playback(&self) -> Response {
+        Response::Success("Stop playing music".to_string())
+    }
+
+    fn exec_client_request(&mut self, mut stream: TcpStream) {
+        let mut buffer: [u8; MSG_SIZE] = [0; MSG_SIZE];
+        let bytes_read = stream.read(&mut buffer).unwrap();
+        println!("{}", bytes_read); 
+
+        let slice = &buffer[0..bytes_read];
+        let request: Request = serde_json::from_slice(slice).unwrap();
+        let response = match request {
+            Request::Start => self.start_playback(),
+            Request::Stop => self.stop_playback()
+        };
+
+        serde_json::to_writer(stream, &response).unwrap();
+   }
 }
 
 pub fn spawn_if_not_spawned() {
-    if let Ok(_) = TcpStream::connect(crate::SERVER_ADDR) {
+    if let Ok(_) = TcpStream::connect(ADDR) {
         return; // Server is already spawned
     }
 
     // TODO: replace this path with an actual command
     let path = "/home/aabiji/dev/muse/target/debug/muse";
-    Command::new(path).arg("--server-mode").spawn();
+    Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
 
     // Wait to process to start
     std::thread::sleep(std::time::Duration::from_secs(1));
