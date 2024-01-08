@@ -3,7 +3,6 @@ use std::process::Command;
 use serde::{Serialize, Deserialize};
 use std::net::{TcpListener, TcpStream};
 
-pub const MSG_SIZE: usize = 256;
 pub const ADDR: &str = "127.0.0.1:1234";
 pub const SERVER_MODE_FLAG: &str = "--server-mode";
 
@@ -27,13 +26,13 @@ fn load_config() -> Config {
     config
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
     Start, // Start audio playback
     Stop,  // Stop audio playback
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
     Success(String),
     Error(String),
@@ -50,10 +49,10 @@ impl Server {
         }
     }
 
-    pub fn start(&mut self) {
+    pub fn run(&mut self) {
         let listener = TcpListener::bind(ADDR).unwrap();
-        for stream in listener.incoming() {
-            self.exec_client_request(stream.unwrap());
+        for conn in listener.incoming() {
+            self.handle_client_connection(conn.unwrap());
         }
     }
 
@@ -65,19 +64,23 @@ impl Server {
         Response::Success("Stop playing music".to_string())
     }
 
-    fn exec_client_request(&mut self, mut stream: TcpStream) {
-        let mut buffer: [u8; MSG_SIZE] = [0; MSG_SIZE];
-        let bytes_read = stream.read(&mut buffer).unwrap();
-        println!("{}", bytes_read); 
+    fn handle_client_connection(&mut self, mut conn: TcpStream) {
+        println!("Running the server ... READING");
+        let mut buffer: Vec<u8> = Vec::new();
+        let read = conn.read(&mut buffer).unwrap();
+        println!("Running the server ... READ {}", read);
 
-        let slice = &buffer[0..bytes_read];
-        let request: Request = serde_json::from_slice(slice).unwrap();
+        let buffer = crate::read_data(&mut conn);
+        let request: Request = serde_json::from_slice(&buffer).unwrap();
+
         let response = match request {
             Request::Start => self.start_playback(),
             Request::Stop => self.stop_playback()
         };
 
-        serde_json::to_writer(stream, &response).unwrap();
+        let mut data: Vec<u8> = Vec::new();
+        serde_json::to_writer(&mut data, &response).unwrap();
+        crate::write_data(&mut conn, data);
    }
 }
 
@@ -86,7 +89,7 @@ pub fn spawn_if_not_spawned() {
         return; // Server is already spawned
     }
 
-    // TODO: replace this path with an actual command
+    // TODO: replace this path with an actual command 
     let path = "/home/aabiji/dev/muse/target/debug/muse";
     Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
 
