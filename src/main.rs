@@ -1,11 +1,10 @@
-use std::io::prelude::*;
-use std::net::{TcpStream, Shutdown};
-use colored::Colorize;
-
-mod server;
+mod audio;
+mod net;
 
 fn print_help() {
-    println!("{}", r#"
+    println!(
+        "{}",
+        r#"
 muse is a cli program to play background music.
 
 Usage:
@@ -15,75 +14,29 @@ Options:
 start        Start playing music.
 stop         Stop playing music.
 info         Show info about currently played audio. 
-    "#);
-}
-
-fn write_data(stream: &mut TcpStream, data: Vec<u8>) {
-    // Custom wire format used to transfer data 
-    // between the client and server: [ LENGTH, DATA ]
-    stream.write(&[data.len() as u8]).unwrap();
-    stream.write_all(&data).unwrap();
-    stream.flush().unwrap();
-}
-
-fn read_data(stream: &mut TcpStream) -> Vec<u8> {
-    // Custom wire format used to transfer data 
-    // between the client and server: [ LENGTH, DATA ]
-    let mut data = vec![0];
-    stream.read_exact(data.as_mut_slice()).unwrap();
-    let length = data[0] as usize;
-
-    data.clear();
-    data.resize(length, 0);
-    stream.read_exact(data.as_mut_slice()).unwrap();
-
-    data
-}
-
-fn send_request(r: server::Request) -> server::Response {
-    let mut conn = TcpStream::connect(server::ADDR).unwrap();
-
-    let mut data: Vec<u8> = Vec::new();
-    serde_json::to_writer(&mut data, &r).unwrap();
-    write_data(&mut conn, data);
-
-    let buffer = read_data(&mut conn);
-    let response: server::Response = serde_json::from_slice(&buffer).unwrap();
-
-    conn.shutdown(Shutdown::Both).unwrap();
-    response
+    "#
+    );
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    let arg = &args[1];
 
-    let max_args = 2;
-    if args.len() != max_args {
+    if args.len() !=2 {
         print_help();
         return;
     }
 
-    if args.contains(&server::SERVER_MODE_FLAG.to_string()) {
-        let mut server = server::Server::new();
-        server.run();
+    if arg == net::SERVER_MODE_FLAG {
+        net::run_server();
         return;
     }
 
-    if !args.contains(&"start".to_string()) && !args.contains(&"stop".to_string()) {
+    let possible_user_args = ["start", "stop", "info"];
+    if !possible_user_args.contains(&arg.as_str()) {
         print_help();
         return;
     }
 
-    server::spawn_if_not_spawned();
-
-    let request = if args[1] == "start" {
-        server::Request::Start
-    } else {
-        server::Request::Stop
-    };
-
-    match send_request(request) {
-        server::Response::Success(msg) => println!("{}", msg.green()),
-        server::Response::Error(msg) => println!("{}", msg.red()),
-    };
+    net::run_client(arg);
 }
