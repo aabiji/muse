@@ -61,14 +61,12 @@ impl Server {
     }
 
     fn stop_playback(&self) -> Response {
-        Response::Success("Stop playing music".to_string())
+        Response::Success("Stopped playing music".to_string())
     }
 
     fn handle_client_connection(&mut self, mut conn: TcpStream) {
-        println!("Running the server ... READING");
         let mut buffer: Vec<u8> = Vec::new();
-        let read = conn.read(&mut buffer).unwrap();
-        println!("Running the server ... READ {}", read);
+        conn.read(&mut buffer).unwrap();
 
         let buffer = crate::read_data(&mut conn);
         let request: Request = serde_json::from_slice(&buffer).unwrap();
@@ -85,8 +83,8 @@ impl Server {
 }
 
 pub fn spawn_if_not_spawned() {
-    if let Ok(_) = TcpStream::connect(ADDR) {
-        return; // Server is already spawned
+    if let Err(_) = TcpListener::bind(ADDR) {
+        return; // ADDR must already be in use (aka. server process is running)
     }
 
     // TODO: replace this path with an actual command 

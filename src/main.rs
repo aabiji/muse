@@ -1,5 +1,5 @@
 use std::io::prelude::*;
-use std::net::TcpStream;
+use std::net::{TcpStream, Shutdown};
 use colored::Colorize;
 
 mod server;
@@ -41,9 +41,7 @@ fn read_data(stream: &mut TcpStream) -> Vec<u8> {
 }
 
 fn send_request(r: server::Request) -> server::Response {
-    println!("Running the client ...");
     let mut conn = TcpStream::connect(server::ADDR).unwrap();
-    println!("Running the client ... CONNECTED");
 
     let mut data: Vec<u8> = Vec::new();
     serde_json::to_writer(&mut data, &r).unwrap();
@@ -52,7 +50,7 @@ fn send_request(r: server::Request) -> server::Response {
     let buffer = read_data(&mut conn);
     let response: server::Response = serde_json::from_slice(&buffer).unwrap();
 
-    conn.shutdown(std::net::Shutdown::Both).unwrap();
+    conn.shutdown(Shutdown::Both).unwrap();
     response
 }
 
