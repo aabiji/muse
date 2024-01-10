@@ -22,7 +22,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let arg = &args[1];
 
-    if args.len() !=2 {
+    if args.len() != 2 {
         print_help();
         return;
     }

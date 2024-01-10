@@ -5,6 +5,8 @@ use std::process::Command;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
+use crate::audio::Playback;
+
 pub const ADDR: &str = "127.0.0.1:1234";
 pub const SERVER_MODE_FLAG: &str = "--server-mode";
 
@@ -64,22 +66,28 @@ pub fn run_client(arg: &str) {
     } else {
         Request::Stop
     };
+
     match send_request(request) {
         Response::Success(msg) => println!("{}", msg.green()),
         Response::Error(msg) => println!("{}", msg.red()),
     };
 }
 
-fn send_response(mut stream: TcpStream) {
+fn send_response(mut stream: TcpStream, playback: &mut Playback) {
     let mut buffer: Vec<u8> = Vec::new();
     stream.read(&mut buffer).unwrap();
 
     let buffer = read_data(&mut stream);
     let request: Request = serde_json::from_slice(&buffer).unwrap();
 
-    let response = match request {
-        Request::Start => crate::audio::start_playback(),
-        Request::Stop => crate::audio::stop_playback(),
+    let result = match request {
+        Request::Start => playback.start(),
+        Request::Stop => playback.stop(),
+    };
+
+    let response = match result {
+        Ok(msg) => Response::Success(msg),
+        Err(msg) => Response::Error(msg),
     };
 
     let mut data: Vec<u8> = Vec::new();
@@ -88,9 +96,11 @@ fn send_response(mut stream: TcpStream) {
 }
 
 pub fn run_server() {
+    let mut playback = Playback::new();
     let listener = TcpListener::bind(ADDR).unwrap();
+
     for stream in listener.incoming() {
-        send_response(stream.unwrap());
+        send_response(stream.unwrap(), &mut playback);
     }
 }
 
