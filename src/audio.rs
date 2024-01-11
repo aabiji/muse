@@ -1,19 +1,19 @@
 use std::fs::File;
 use std::io::BufReader;
 
+use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use serde::Deserialize;
-use rodio::{OutputStream, OutputStreamHandle, Decoder, Sink};
 
 #[derive(Deserialize)]
-pub enum PlaybackOrder {
+enum PlaybackOrder {
     Random,
     Alphabetical,
 }
 
 #[derive(Deserialize)]
-pub struct Config {
+struct Config {
     audio_folder_path: String,
-    continue_playback: bool,
+    resume_playback: bool,
     playback_order: PlaybackOrder,
 }
 
@@ -28,42 +28,57 @@ impl Config {
 
 pub struct Playback {
     _stream: OutputStream,
-    handle: OutputStreamHandle,
+    _handle: OutputStreamHandle,
     config: Config,
-    current_sink: Sink,
+    sink: Sink,
 }
 
 impl Playback {
     pub fn new() -> Self {
-        let (stream, handle) = OutputStream::try_default().unwrap();
-        let mut pb = Playback {
+        let (_stream, _handle) = OutputStream::try_default().unwrap();
+        let sink = Sink::try_new(&_handle).unwrap();
+        Playback {
             config: Config::new(),
-            _stream: stream,
-            handle,
-            current_sink: Sink::new_idle().0
-        };
+            _stream, _handle, sink
+        }
+    }
 
-        pb.current_sink = Sink::try_new(&pb.handle).unwrap();
-        pb
+    // TODO: sort entries
+    // TODO: continue playback from timestamp
+    // TODO: expand relative path into absolute path
+    fn load_audio_directory(&mut self) {
+        let directory = std::fs::read_dir(&self.config.audio_folder_path).unwrap();
+        for entry in directory {
+            let entry = entry.unwrap();
+            if entry.metadata().unwrap().is_dir() {
+                continue;
+            }
+
+            let path = entry.path();
+            let file = File::open(&path).unwrap();
+            let reader = BufReader::new(file);
+
+            match Decoder::new(reader) {
+                Ok(source) => self.sink.append(source),
+                Err(_) => { // See rodio::decoder::DecoderError
+                    println!("Unable to load {}", path.display());
+                    continue;
+                },
+            };
+        }
     }
 
     pub fn start(&mut self) -> Result<String, String> {
-        if !self.current_sink.empty() && !self.current_sink.is_paused() {
+        if !self.sink.empty() && !self.sink.is_paused() {
             return Err(String::from("Audio is already playing."));
         }
 
-        let file = File::open(&self.config.audio_folder_path).unwrap();
-        let reader = BufReader::new(file);
-        let source = Decoder::new(reader).unwrap();
-
-        self.current_sink.append(source);
-        self.current_sink.play();
-
+        self.load_audio_directory();
         Ok(String::from("starting ..."))
     }
 
     pub fn stop(&mut self) -> Result<String, String> {
-        self.current_sink.pause();
+        self.sink.pause();
         Ok(String::from("stopping ..."))
     }
 }
