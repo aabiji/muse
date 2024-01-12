@@ -8,25 +8,24 @@ fn print_help() {
 muse is a cli program to play background music.
 
 Usage:
-muse [Options]
+muse [options]
 
 Options:
 start        Start playing music.
 stop         Stop playing music.
-info         Show info about currently played audio. 
+info         Show info about currently played audio.
     "#
     );
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let arg = &args[1];
-
     if args.len() != 2 {
         print_help();
         return;
     }
 
+    let arg = &args[1];
     if arg == net::SERVER_MODE_FLAG {
         net::run_server();
         return;
