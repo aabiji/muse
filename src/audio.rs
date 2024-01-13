@@ -3,6 +3,7 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde::Deserialize;
 
@@ -17,7 +18,7 @@ struct Config {
     audio_folder_path: String,
     playback_order: PlaybackOrder,
     resume_playback: bool,
-    stopped_timestamp: u32,
+    stopped_timestamp: Duration,
 }
 
 impl Config {
@@ -32,7 +33,7 @@ impl Config {
 #[derive(Debug)]
 struct Track {
     file: String,
-    length: Duration,
+    duration: Duration,
 }
 
 pub struct Playback {
@@ -69,6 +70,17 @@ impl Playback {
         };
     }
 
+    fn add_source<S>(&mut self, source: S, path: &PathBuf)
+        where S: Source<Item = i16> + 'static + std::marker::Send
+    {
+        let tags = lofty::read_from_path(&path).unwrap();
+        let duration = tags.properties().duration();
+        let file = path.display().to_string();
+
+        self.tracks.push(Track { file, duration });
+        self.sink.append(source);
+    }
+
     // TODO: continue playback from timestamp
     fn load_audio_directory(&mut self) {
         let mut paths: Vec<PathBuf> = Vec::new();
@@ -88,15 +100,7 @@ impl Playback {
             let reader = BufReader::new(file);
 
             match Decoder::new(reader) {
-                Ok(source) => {
-                    let file = path.display().to_string();
-                    let length = match source.total_duration() {
-                        Some(len) => len,
-                        None => Duration::from_secs(0),
-                    };
-                    self.tracks.push(Track { file, length });
-                    self.sink.append(source);
-                }
+                Ok(source) => self.add_source(source, &path),
                 Err(_) => {
                     // See rodio::decoder::DecoderError
                     println!("Unable to load {}.", path.display());
@@ -113,7 +117,6 @@ impl Playback {
 
         self.load_audio_directory();
         self.sink.play();
-
         Ok(String::from("starting ..."))
     }
 
