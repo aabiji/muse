@@ -12,8 +12,9 @@ pub const SERVER_MODE_FLAG: &str = "--server-mode";
 
 #[derive(Serialize, Deserialize)]
 enum Request {
-    Start, // Start audio playback
-    Stop,  // Stop audio playback
+    Play,  // Play audio playback
+    Pause, // Pause audio playback
+    Stop,  // Stop the playback server
 }
 
 #[derive(Serialize, Deserialize)]
@@ -44,76 +45,112 @@ fn read_data(stream: &mut TcpStream) -> Vec<u8> {
     data
 }
 
-fn send_request(r: Request) -> Response {
-    let mut stream = TcpStream::connect(ADDR).unwrap();
-
-    let mut data: Vec<u8> = Vec::new();
-    serde_json::to_writer(&mut data, &r).unwrap();
-    write_data(&mut stream, data);
-
-    let buffer = read_data(&mut stream);
-    let response: Response = serde_json::from_slice(&buffer).unwrap();
-
-    stream.shutdown(Shutdown::Both).unwrap();
-    response
+pub struct Server {
+    shutdown_requested: bool,
+    playback: Playback,
 }
 
-pub fn run_client(arg: &str) {
-    spawn_server();
+impl Server {
+    pub fn new() -> Self {
+        Self {
+            shutdown_requested: false,
+            playback: Playback::new(),
+        }
+    }
 
-    let request = if arg == "start" {
-        Request::Start
-    } else {
-        Request::Stop
-    };
+    fn send_response(&mut self, mut stream: TcpStream) {
+        let mut buffer: Vec<u8> = Vec::new();
+        stream.read(&mut buffer).unwrap();
 
-    match send_request(request) {
-        Response::Success(msg) => println!("{}", msg.green()),
-        Response::Error(msg) => println!("{}", msg.red()),
-    };
-}
+        let buffer = read_data(&mut stream);
+        let request: Request = serde_json::from_slice(&buffer).unwrap();
 
-fn send_response(mut stream: TcpStream, playback: &mut Playback) {
-    let mut buffer: Vec<u8> = Vec::new();
-    stream.read(&mut buffer).unwrap();
+        let result = match request {
+            Request::Play => self.playback.play(),
+            Request::Pause => self.playback.pause(),
+            Request::Stop => {
+                self.shutdown_requested = true;
+                Ok(String::from("Audio server stopped."))
+            }
+        };
 
-    let buffer = read_data(&mut stream);
-    let request: Request = serde_json::from_slice(&buffer).unwrap();
+        let response = match result {
+            Ok(msg) => Response::Success(msg),
+            Err(msg) => Response::Error(msg),
+        };
 
-    let result = match request {
-        Request::Start => playback.start(),
-        Request::Stop => playback.stop(),
-    };
+        let mut data: Vec<u8> = Vec::new();
+        serde_json::to_writer(&mut data, &response).unwrap();
+        write_data(&mut stream, data);
+    }
 
-    let response = match result {
-        Ok(msg) => Response::Success(msg),
-        Err(msg) => Response::Error(msg),
-    };
+    pub fn run(&mut self) {
+        let listener = TcpListener::bind(ADDR).unwrap();
+        for stream in listener.incoming() {
+            self.send_response(stream.unwrap());
+            if self.shutdown_requested {
+                break;
+            }
+        }
+    }
 
-    let mut data: Vec<u8> = Vec::new();
-    serde_json::to_writer(&mut data, &response).unwrap();
-    write_data(&mut stream, data);
-}
-
-pub fn run_server() {
-    let mut playback = Playback::new();
-    let listener = TcpListener::bind(ADDR).unwrap();
-
-    for stream in listener.incoming() {
-        send_response(stream.unwrap(), &mut playback);
+    fn is_running() -> bool {
+        if let Err(_) = TcpListener::bind(ADDR) {
+            return true;
+        }
+        false
     }
 }
 
-pub fn spawn_server() {
-    // The server process is already running
-    if let Err(_) = TcpListener::bind(ADDR) {
-        return;
+pub struct Client;
+
+impl Client {
+    fn send_request(&self, r: Request) -> Response {
+        let mut stream = TcpStream::connect(ADDR).unwrap();
+
+        let mut data: Vec<u8> = Vec::new();
+        serde_json::to_writer(&mut data, &r).unwrap();
+        write_data(&mut stream, data);
+
+        let buffer = read_data(&mut stream);
+        let response: Response = serde_json::from_slice(&buffer).unwrap();
+
+        stream.shutdown(Shutdown::Both).unwrap();
+        response
     }
 
-    let exe_path = std::env::current_exe().unwrap();
-    let path = exe_path.to_str().unwrap();
-    Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
+    fn spawn_server_process(&mut self) {
+        if Server::is_running() {
+            return;
+        }
 
-    // Wait to process to start
-    std::thread::sleep(std::time::Duration::from_secs(1));
+        let exe_path = std::env::current_exe().unwrap();
+        let path = exe_path.to_str().unwrap();
+        Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
+
+        // Wait to process to start
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    pub fn run(&mut self, arg: &str) {
+        if !Server::is_running() && arg == "stop" {
+            let msg = String::from("No audio server is currently running.");
+            println!("{}", msg.red());
+            return;
+        }
+
+        self.spawn_server_process();
+
+        let request = match arg {
+            "start" => Request::Play,
+            "stop" => Request::Stop,
+            "pause" => Request::Pause,
+            _ => Request::Play,
+        };
+
+        match self.send_request(request) {
+            Response::Success(msg) => println!("{}", msg.green()),
+            Response::Error(msg) => println!("{}", msg.red()),
+        };
+    }
 }

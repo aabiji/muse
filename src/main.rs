@@ -5,15 +5,15 @@ fn print_help() {
     println!(
         "{}",
         r#"
-muse is a cli program to play background music.
+Muse is a minimal cli music player.
 
 Usage:
 muse [options]
 
 Options:
-start        Start playing music.
-stop         Stop playing music.
-info         Show info about currently played audio.
+play         Start playing music.
+pause        Pause the playing music.
+stop         Stop the audio playback server.
     "#
     );
 }
@@ -27,15 +27,17 @@ fn main() {
 
     let arg = &args[1];
     if arg == net::SERVER_MODE_FLAG {
-        net::run_server();
+        let mut server = net::Server::new();
+        server.run();
         return;
     }
 
-    let possible_user_args = ["start", "stop", "info"];
+    let possible_user_args = ["play", "pause", "stop"];
     if !possible_user_args.contains(&arg.as_str()) {
         print_help();
         return;
     }
 
-    net::run_client(arg);
+    let mut client = net::Client {};
+    client.run(arg);
 }

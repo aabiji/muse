@@ -1,6 +1,6 @@
 use std::fs::File;
-use std::path::PathBuf;
 use std::io::BufReader;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
@@ -40,7 +40,7 @@ pub struct Playback {
     _handle: OutputStreamHandle,
     config: Config,
     sink: Sink,
-    tracks: Vec<Track>
+    tracks: Vec<Track>,
 }
 
 impl Playback {
@@ -49,7 +49,9 @@ impl Playback {
         let sink = Sink::try_new(&_handle).unwrap();
         Playback {
             config: Config::new(),
-            _stream, _handle, sink,
+            _stream,
+            _handle,
+            sink,
             tracks: Vec::new(),
         }
     }
@@ -63,7 +65,7 @@ impl Playback {
 
         match self.config.playback_order {
             PlaybackOrder::Alphabetical => paths.sort_by(alpha_sort),
-            PlaybackOrder::Random => {},
+            PlaybackOrder::Random => {}
         };
     }
 
@@ -92,18 +94,19 @@ impl Playback {
                         Some(len) => len,
                         None => Duration::from_secs(0),
                     };
-                    self.tracks.push(Track{file, length});
+                    self.tracks.push(Track { file, length });
                     self.sink.append(source);
                 }
-                Err(_) => { // See rodio::decoder::DecoderError
-                    println!("Unable to load {}", path.display());
+                Err(_) => {
+                    // See rodio::decoder::DecoderError
+                    println!("Unable to load {}.", path.display());
                     continue;
-                },
+                }
             };
         }
     }
 
-    pub fn start(&mut self) -> Result<String, String> {
+    pub fn play(&mut self) -> Result<String, String> {
         if !self.sink.empty() && !self.sink.is_paused() {
             return Err(String::from("Audio is already playing."));
         }
@@ -114,9 +117,9 @@ impl Playback {
         Ok(String::from("starting ..."))
     }
 
-    pub fn stop(&mut self) -> Result<String, String> {
+    pub fn pause(&mut self) -> Result<String, String> {
         if self.sink.empty() {
-            return Err(String::from("No audio is playing"));
+            return Err(String::from("No audio is playing."));
         }
 
         self.sink.pause();
