@@ -70,7 +70,7 @@ impl Server {
             Request::Pause => self.playback.pause(),
             Request::Stop => {
                 self.shutdown_requested = true;
-                Ok(String::from("Audio server stopped."))
+                self.playback.stop()
             }
         };
 
@@ -134,7 +134,7 @@ impl Client {
 
     pub fn run(&mut self, arg: &str) {
         if !Server::is_running() && arg == "stop" {
-            let msg = String::from("No audio server is currently running.");
+            let msg = String::from("No audio server is running.");
             println!("{}", msg.red());
             return;
         }
