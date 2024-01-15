@@ -52,20 +52,26 @@ pub struct Playback {
     start_time: SystemTime,
     config: Config,
     tracks: Vec<Track>,
+    current_track: usize,
 }
 
 impl Playback {
     pub fn new() -> Self {
         let (_stream, _handle) = OutputStream::try_default().unwrap();
         let sink = Sink::try_new(&_handle).unwrap();
-        Playback {
+        let mut playback = Playback {
             config: Config::new(),
             _stream,
             _handle,
             sink,
+            current_track: 0,
             start_time: SystemTime::now(),
             tracks: Vec::new(),
-        }
+        };
+
+        playback.load_tracks();
+        playback.sort_tracks();
+        playback
     }
 
     fn sort_tracks(&mut self) {
@@ -97,6 +103,15 @@ impl Playback {
         }
     }
 
+    pub fn check_track(&mut self) {
+        if !self.sink.empty() {
+            return;
+        }
+
+        self.current_track += 1;
+        self.play_tracks();
+    }
+
     fn play_track(&mut self, path: &PathBuf, starting_point: Duration) {
         let file = File::open(path).unwrap();
         let reader = BufReader::new(file);
@@ -106,41 +121,26 @@ impl Playback {
 
         self.sink.append(source);
         self.sink.play();
-        self.sink.sleep_until_end();
     }
 
     fn play_tracks(&mut self) {
-        let mut i = 0;
         let mut start = Duration::from_secs(self.config.elapsed_secs);
 
-        // Play all tracks in loop, from start.
-        // Skip tracks and a portion of a track
-        // before starting playback.
-        loop {
-            let track = self.tracks[i].clone();
-            if start < track.duration {
-                self.play_track(&track.path, start);
-            }
-
-            if start > Duration::from_secs(0) {
-                start = start.saturating_sub(track.duration);
-            }
-
-            i += 1;
-            if i == self.tracks.len() {
-                i = 0;
-            }
+        while start > self.tracks[self.current_track].duration {
+            start = start.saturating_sub(self.tracks[self.current_track].duration);
+            self.current_track += 1;
         }
-    }
+
+        let track = &self.tracks[self.current_track].clone();
+        self.play_track(&track.path, start);
+}
 
     pub fn play(&mut self) -> Result<String, String> {
         if !self.sink.empty() && !self.sink.is_paused() {
             return Err(String::from("Audio is already playing."));
         }
 
-        self.load_tracks();
-        self.sort_tracks();
-        self.play_tracks(); // TODO: run in separate thread (not blocking)
+        self.play_tracks();
 
         Ok(String::from("Started audio playback."))
     }

@@ -45,6 +45,8 @@ fn read_data(stream: &mut TcpStream) -> Vec<u8> {
     data
 }
 
+// Responsible for receiving client commands and
+// executing them, returning a response.
 pub struct Server {
     shutdown_requested: bool,
     playback: Playback,
@@ -86,11 +88,18 @@ impl Server {
 
     pub fn run(&mut self) {
         let listener = TcpListener::bind(ADDR).unwrap();
+        listener.set_nonblocking(true).unwrap();
+
         for stream in listener.incoming() {
-            self.send_response(stream.unwrap());
-            if self.shutdown_requested {
-                break;
+            if let Ok(stream) = stream {
+                self.send_response(stream);
+                if self.shutdown_requested {
+                    break;
+                }
             }
+
+            self.playback.check_track();
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 
@@ -102,6 +111,8 @@ impl Server {
     }
 }
 
+// Responsible for sending requests to the
+// server and outputting the server's response.
 pub struct Client;
 
 impl Client {
