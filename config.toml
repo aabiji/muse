@@ -1,0 +1,15 @@
+# Path to the folder containing the audio files
+# that will be played.
+audio_folder_path = "/path/to/audio_folder"
+
+# The order in which the audio files are played
+# Can be either "Random" or "Alphabetical"
+playback_order = "Random"
+
+# Should it resume playback where it stopped?
+resume_playback = true
+
+# Number of seconds audio has been playing
+# Used to resume playback. This is a value set
+# by muse so please don't edit this.
+elapsed_secs = 0

@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use lofty::AudioFile;
@@ -48,11 +49,10 @@ struct Track {
 pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
-    sink: Sink,
+    sink: Arc<Mutex<Sink>>,
     start_time: SystemTime,
     config: Config,
     tracks: Vec<Track>,
-    current_track: usize,
 }
 
 impl Playback {
@@ -63,8 +63,7 @@ impl Playback {
             config: Config::new(),
             _stream,
             _handle,
-            sink,
-            current_track: 0,
+            sink: Arc::new(Mutex::new(sink)),
             start_time: SystemTime::now(),
             tracks: Vec::new(),
         };
@@ -103,54 +102,66 @@ impl Playback {
         }
     }
 
-    pub fn check_track(&mut self) {
-        if !self.sink.empty() {
-            return;
-        }
-
-        self.current_track += 1;
-        self.play_tracks();
-    }
-
-    fn play_track(&mut self, path: &PathBuf, starting_point: Duration) {
+    fn play_track(sink: &mut Arc<Mutex<Sink>>, path: &PathBuf, starting_point: Duration) {
         let file = File::open(path).unwrap();
         let reader = BufReader::new(file);
 
         let source = Decoder::new(reader).unwrap();
         let source = source.skip_duration(starting_point);
 
-        self.sink.append(source);
-        self.sink.play();
+        sink.lock().unwrap().append(source);
+        sink.lock().unwrap().play();
     }
 
-    fn play_tracks(&mut self) {
-        let mut start = Duration::from_secs(self.config.elapsed_secs);
+    fn play_tracks(mut sink: Arc<Mutex<Sink>>, tracks: Vec<Track>, mut start: Duration) {
+        let mut current = 0;
 
-        while start > self.tracks[self.current_track].duration {
-            start = start.saturating_sub(self.tracks[self.current_track].duration);
-            self.current_track += 1;
+        loop {
+            if !sink.lock().unwrap().empty() {
+                std::thread::sleep(Duration::from_secs(5));
+                continue;
+            }
+
+            let track = &tracks[current];
+            if start < track.duration {
+                Playback::play_track(&mut sink, &track.path, start);
+            }
+
+            start = start.saturating_sub(track.duration);
+
+            current += 1;
+            if current == tracks.len() {
+                current = 0;
+            }
         }
-
-        let track = &self.tracks[self.current_track].clone();
-        self.play_track(&track.path, start);
-}
+    }
 
     pub fn play(&mut self) -> Result<String, String> {
-        if !self.sink.empty() && !self.sink.is_paused() {
+        if !self.sink.lock().unwrap().empty() && !self.sink.lock().unwrap().is_paused() {
             return Err(String::from("Audio is already playing."));
         }
 
-        self.play_tracks();
+        if !self.sink.lock().unwrap().empty() {
+            self.sink.lock().unwrap().play();
+            return Ok(String::from("Started audio playback."));
+        }
+
+        let cloned = self.sink.clone();
+        let tracks = self.tracks.clone();
+        let start = Duration::from_secs(self.config.elapsed_secs);
+        std::thread::spawn(move || {
+            Playback::play_tracks(cloned, tracks, start);
+        });
 
         Ok(String::from("Started audio playback."))
     }
 
     pub fn pause(&mut self) -> Result<String, String> {
-        if self.sink.empty() {
+        if self.sink.lock().unwrap().empty() {
             return Err(String::from("No audio is playing."));
         }
 
-        self.sink.pause();
+        self.sink.lock().unwrap().pause();
         Ok(String::from("Stopped audio playback."))
     }
 

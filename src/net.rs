@@ -88,18 +88,12 @@ impl Server {
 
     pub fn run(&mut self) {
         let listener = TcpListener::bind(ADDR).unwrap();
-        listener.set_nonblocking(true).unwrap();
-
         for stream in listener.incoming() {
-            if let Ok(stream) = stream {
-                self.send_response(stream);
-                if self.shutdown_requested {
-                    break;
-                }
+            let stream = stream.unwrap();
+            self.send_response(stream);
+            if self.shutdown_requested {
+                break;
             }
-
-            self.playback.check_track();
-            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 
@@ -108,6 +102,19 @@ impl Server {
             return true;
         }
         false
+    }
+
+    fn spawn_process() {
+        if Server::is_running() {
+            return;
+        }
+
+        let exe_path = std::env::current_exe().unwrap();
+        let path = exe_path.to_str().unwrap();
+        Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
+
+        // TODO: fix this (why are we sleeping?)
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
@@ -130,19 +137,6 @@ impl Client {
         response
     }
 
-    fn spawn_server_process(&mut self) {
-        if Server::is_running() {
-            return;
-        }
-
-        let exe_path = std::env::current_exe().unwrap();
-        let path = exe_path.to_str().unwrap();
-        Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
-
-        // Wait to process to start
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-
     pub fn run(&mut self, arg: &str) {
         if !Server::is_running() && arg == "stop" {
             let msg = String::from("No audio server is running.");
@@ -150,7 +144,7 @@ impl Client {
             return;
         }
 
-        self.spawn_server_process();
+        Server::spawn_process();
 
         let request = match arg {
             "start" => Request::Play,
