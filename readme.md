@@ -1,7 +1,7 @@
 Muse is a cli program to play background music.
 
 ### Usage
-`muse`        Output program info.
+`muse`        Output program info.  
 `muse play`   Play background music.  
 `muse pause`  Pause background music.  
 `muse stop`   Stops the background audio playback server.  
