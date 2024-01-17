@@ -10,19 +10,19 @@ pub enum PlaybackOrder {
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub audio_folder_path: String,
-    pub playback_order: PlaybackOrder,
-    pub resume_playback: bool,
     pub start_point: u64,
+    pub resume_playback: bool,
+    pub playback_order: PlaybackOrder,
+    pub audio_directories: Vec<String>,
 }
 
 impl Config {
     pub fn default() -> Self {
         Config {
-            audio_folder_path: String::new(),
-            playback_order: PlaybackOrder::Random,
-            resume_playback: true,
             start_point: 0,
+            resume_playback: true,
+            audio_directories: Vec::new(),
+            playback_order: PlaybackOrder::Random,
         }
     }
 
@@ -49,12 +49,11 @@ impl Config {
             config.start_point = 0;
         }
 
-        if !Path::new(&config.audio_folder_path).exists() {
-            let msg = format!(
-                "Path to audio folder ({}) not found.",
-                config.audio_folder_path
-            );
-            return Err(Box::<dyn Error>::from(msg));
+        for path in &config.audio_directories {
+            if !Path::new(&path).exists() {
+                let msg = format!("Path to audio folder ({}) not found.", path);
+                return Err(Box::<dyn Error>::from(msg));
+            }
         }
 
         *self = config;

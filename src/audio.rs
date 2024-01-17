@@ -1,13 +1,25 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
+
+use colored::Colorize;
 
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
 use crate::config::{Config, PlaybackOrder};
+
+fn is_supported_codec(file: &Path) -> bool {
+    // Taken from the rodio readme
+    let supported = ["mp3", "mp4", "wav", "ogg", "flac"];
+    let extension = file.extension().unwrap().to_str().unwrap();
+    if !supported.contains(&extension) {
+        return false;
+    }
+    true
+}
 
 #[derive(Clone)]
 struct Track {
@@ -56,7 +68,9 @@ impl Playback {
         }
 
         self.load_tracks();
-        self.sort_tracks();
+        if self.tracks.len() == 0 {
+            return Err(String::from("No audio directories specified."));
+        }
 
         // Assure that the resumption point is smaller than the
         // total length of all audio tracks
@@ -81,14 +95,31 @@ impl Playback {
     }
 
     fn load_tracks(&mut self) {
-        let directory = std::fs::read_dir(&self.config.audio_folder_path).unwrap();
+        let dir = self.config.audio_directories.clone();
+        for path in dir {
+            self.read_tracks(&Path::new(&path));
+        }
+
+        self.sort_tracks();
+    }
+
+    fn read_tracks(&mut self, directory: &Path) {
+        let directory = std::fs::read_dir(directory).unwrap();
         for entry in directory {
             let entry = entry.unwrap();
+            let path = entry.path();
+
             if entry.metadata().unwrap().is_dir() {
+                self.read_tracks(&entry.path());
                 continue;
             }
 
-            let path = entry.path();
+            if !is_supported_codec(&path) {
+                let warning = format!("Couldn't load {}", path.to_str().unwrap());
+                println!("{}", warning.yellow());
+                continue;
+            }
+
             let tags = lofty::read_from_path(&path).unwrap();
             let duration = tags.properties().duration();
 

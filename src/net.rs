@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::process::Command;
+use std::process::{exit, Command};
 
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -81,13 +81,14 @@ impl Server {
             Err(msg) => Response::Error(msg),
         };
 
-        if let Response::Error(_) = response {
-            self.playback.stop().unwrap();
-        }
-
         let mut data: Vec<u8> = Vec::new();
         serde_json::to_writer(&mut data, &response).unwrap();
         write_data(&mut stream, data);
+
+        if let Response::Error(_) = response {
+            self.playback.stop().unwrap();
+            exit(1);
+        }
     }
 
     pub fn run(&mut self) {
