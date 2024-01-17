@@ -7,6 +7,7 @@ fn print_help() {
         "{}",
         r#"
 Muse is a minimal cli music player.
+See https://github.com/aabiji/muse/blob/main/readme.md for more info.
 
 Usage:
 muse [options]
