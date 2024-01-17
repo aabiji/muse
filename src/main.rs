@@ -1,45 +1,29 @@
+use clap::Parser;
+
 mod audio;
 mod config;
 mod net;
 
-fn print_help() {
-    println!(
-        "{}",
-        r#"
-Muse is a cli background music player.
-See https://github.com/aabiji/muse/blob/main/readme.md for more info.
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: net::Request,
 
-Usage:
-muse [options]
-
-Options:
-play         Start playing music.
-pause        Pause the playing music.
-stop         Stop the audio playback server.
-    "#
-    );
+    server_flag: Option<String>,
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        print_help();
-        return;
-    }
+    let cli = Cli::parse();
 
-    let arg = &args[1];
-    if arg == net::SERVER_MODE_FLAG {
-        let mut server = net::Server::new();
-        server.run();
-        return;
-    }
-
-    let possible_user_args = ["play", "pause", "stop"];
-    if !possible_user_args.contains(&arg.as_str()) {
-        print_help();
-        return;
+    if let Some(flag) = cli.server_flag {
+        if flag == net::SERVER_MODE_FLAG {
+            let mut server = net::Server::new();
+            server.run();
+            return;
+        }
     }
 
     let mut client = net::Client {};
-    client.run(arg);
+    client.run(cli.command);
 }

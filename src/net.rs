@@ -2,6 +2,7 @@ use std::io::prelude::*;
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process::{exit, Command};
 
+use clap::Subcommand;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
@@ -10,11 +11,14 @@ use crate::audio::Playback;
 pub const ADDR: &str = "127.0.0.1:1234";
 pub const SERVER_MODE_FLAG: &str = "--server-mode";
 
-#[derive(Serialize, Deserialize)]
-enum Request {
-    Play,  // Play audio playback
-    Pause, // Pause audio playback
-    Stop,  // Stop the playback server
+#[derive(PartialEq, Subcommand, Serialize, Deserialize)]
+pub enum Request {
+    /// Play the background audio.
+    Play,
+    /// Pause the background audio.
+    Pause,
+    /// Stop the playback server.
+    Stop,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -142,21 +146,14 @@ impl Client {
         response
     }
 
-    pub fn run(&mut self, arg: &str) {
-        if !Server::is_running() && arg == "stop" {
+    pub fn run(&mut self, request: Request) {
+        if !Server::is_running() && request == Request::Stop {
             let msg = String::from("No audio server is running.");
             println!("{}", msg.red());
             return;
         }
 
         Server::spawn_process();
-
-        let request = match arg {
-            "start" => Request::Play,
-            "stop" => Request::Stop,
-            "pause" => Request::Pause,
-            _ => Request::Play,
-        };
 
         match self.send_request(request) {
             Response::Success(msg) => println!("{}", msg.green()),

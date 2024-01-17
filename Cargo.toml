@@ -2,13 +2,15 @@
 name = "muse"
 version = "0.1.0"
 edition = "2021"
+about = "Muse is a cli background music player"
+author = "Abigail Adegbiji <adegbijiabigail@gmail.com>"
 
 [dependencies]
-rodio = "0.17.3"
+home = "0.5.9"
 toml = "0.8.8"
+lofty = "0.18.0"
+rodio = "0.17.3"
 colored = "2.1.0"
 serde_json = "1.0.111"
+clap = { version = "4.4.18", features = ["derive"] }
 serde = { version = "1.0.195", features = ["derive"] }
-lofty = "0.18.0"
-home = "0.5.9"
-clap = "4.4.18"
