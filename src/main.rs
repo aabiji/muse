@@ -6,7 +6,7 @@ fn print_help() {
     println!(
         "{}",
         r#"
-Muse is a minimal cli music player.
+Muse is a cli background music player.
 See https://github.com/aabiji/muse/blob/main/readme.md for more info.
 
 Usage:

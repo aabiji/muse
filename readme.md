@@ -1,4 +1,4 @@
-Muse is a cli program to play background music.
+Muse is a cli background music player.
 
 ### Usage
 `muse`        Output program info.  
