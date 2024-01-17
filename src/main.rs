@@ -1,4 +1,5 @@
 mod audio;
+mod config;
 mod net;
 
 fn print_help() {

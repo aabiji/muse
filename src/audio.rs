@@ -6,39 +6,8 @@ use std::time::{Duration, SystemTime};
 
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-enum PlaybackOrder {
-    Random,
-    Alphabetical,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Config {
-    audio_folder_path: String,
-    playback_order: PlaybackOrder,
-    resume_playback: bool,
-    elapsed_secs: u64,
-}
-
-impl Config {
-    fn new() -> Self {
-        let path = "config.toml"; // TODO: find path
-        let file = std::fs::read_to_string(path).unwrap();
-        let mut config: Config = toml::from_str(&file).unwrap();
-        if !config.resume_playback {
-            config.elapsed_secs = 0;
-        }
-        config
-    }
-
-    fn save(&self) {
-        let serialized = toml::to_string(&self).unwrap();
-        let path = "config.toml";
-        std::fs::write(path, serialized).unwrap();
-    }
-}
+use crate::config::{Config, PlaybackOrder};
 
 #[derive(Clone)]
 struct Track {
@@ -50,27 +19,52 @@ pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
-    start_time: SystemTime,
+
     config: Config,
-    tracks: Vec<Track>,
+    loaded_config: bool,
+    start_time: SystemTime, // The time at which playback is started
+
+    tracks: Vec<Track>,  // The tracks to be played
+    total_duration: u64, // Total duration of all the tracks
 }
 
 impl Playback {
     pub fn new() -> Self {
         let (_stream, _handle) = OutputStream::try_default().unwrap();
         let sink = Sink::try_new(&_handle).unwrap();
-        let mut playback = Playback {
-            config: Config::new(),
+        Playback {
             _stream,
             _handle,
             sink: Arc::new(Mutex::new(sink)),
-            start_time: SystemTime::now(),
-            tracks: Vec::new(),
-        };
 
-        playback.load_tracks();
-        playback.sort_tracks();
-        playback
+            loaded_config: false,
+            config: Config::default(),
+            start_time: SystemTime::now(),
+
+            tracks: Vec::new(),
+            total_duration: 0,
+        }
+    }
+
+    fn init(&mut self) -> Result<String, String> {
+        if self.loaded_config {
+            return Ok(String::new());
+        }
+
+        if let Err(err) = self.config.load() {
+            return Err(err.to_string());
+        }
+
+        self.load_tracks();
+        self.sort_tracks();
+
+        // Assure that the resumption point is smaller than the
+        // total length of all audio tracks
+        if self.config.start_point > self.total_duration {
+            self.config.start_point %= self.total_duration;
+        }
+
+        Ok(String::new())
     }
 
     fn sort_tracks(&mut self) {
@@ -99,6 +93,7 @@ impl Playback {
             let duration = tags.properties().duration();
 
             self.tracks.push(Track { path, duration });
+            self.total_duration += duration.as_secs();
         }
     }
 
@@ -115,7 +110,6 @@ impl Playback {
 
     fn play_tracks(mut sink: Arc<Mutex<Sink>>, tracks: Vec<Track>, mut start: Duration) {
         let mut current = 0;
-
         loop {
             if !sink.lock().unwrap().empty() {
                 std::thread::sleep(Duration::from_secs(5));
@@ -137,23 +131,27 @@ impl Playback {
     }
 
     pub fn play(&mut self) -> Result<String, String> {
+        self.init()?;
+
         if !self.sink.lock().unwrap().empty() && !self.sink.lock().unwrap().is_paused() {
             return Err(String::from("Audio is already playing."));
         }
 
+        // Continue playback if we don't have to load a new track
+        // For example: unpausing
         if !self.sink.lock().unwrap().empty() {
             self.sink.lock().unwrap().play();
-            return Ok(String::from("Started audio playback."));
+            return Ok(String::from("Starting audio playback ..."));
         }
 
         let cloned = self.sink.clone();
         let tracks = self.tracks.clone();
-        let start = Duration::from_secs(self.config.elapsed_secs);
+        let start = Duration::from_secs(self.config.start_point);
         std::thread::spawn(move || {
             Playback::play_tracks(cloned, tracks, start);
         });
 
-        Ok(String::from("Started audio playback."))
+        Ok(String::from("Starting audio playback ..."))
     }
 
     pub fn pause(&mut self) -> Result<String, String> {
@@ -167,7 +165,7 @@ impl Playback {
 
     pub fn stop(&mut self) -> Result<String, String> {
         let duration = self.start_time.elapsed().unwrap();
-        self.config.elapsed_secs = duration.as_secs();
+        self.config.start_point = duration.as_secs();
         self.config.save();
 
         Ok(String::from("Stopped the playback server."))
