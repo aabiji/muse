@@ -107,6 +107,11 @@ impl Playback {
         for entry in directory {
             let entry = entry.unwrap();
             let path = entry.path();
+            let warning = format!(
+                "Couldn't load {}. {} files are not supported.",
+                path.to_str().unwrap(),
+                path.extension().unwrap().to_str().unwrap()
+            );
 
             if entry.metadata().unwrap().is_dir() {
                 self.read_tracks(&entry.path());
@@ -114,20 +119,22 @@ impl Playback {
             }
 
             if !is_supported_codec(&path) {
-                let warning = format!(
-                    "Couldn't load {}. {} files are not supported.",
-                    path.to_str().unwrap(),
-                    path.extension().unwrap().to_str().unwrap()
-                );
                 println!("{}", warning.yellow());
                 continue;
             }
 
-            let tags = lofty::read_from_path(&path).unwrap();
-            let duration = tags.properties().duration();
-
-            self.tracks.push(Track { path, duration });
-            self.total_duration += duration.as_secs();
+            let result = lofty::read_from_path(&path);
+            match result {
+                Err(_) => {
+                    println!("{}", warning.yellow());
+                    continue;
+                },
+                Ok(tags) => {
+                    let duration = tags.properties().duration();
+                    self.tracks.push(Track { path, duration });
+                    self.total_duration += duration.as_secs();
+                }
+            };
         }
     }
 
