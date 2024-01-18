@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use colored::Colorize;
-
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
@@ -115,7 +114,11 @@ impl Playback {
             }
 
             if !is_supported_codec(&path) {
-                let warning = format!("Couldn't load {}", path.to_str().unwrap());
+                let warning = format!(
+                    "Couldn't load {}. {} files are not supported.",
+                    path.to_str().unwrap(),
+                    path.extension().unwrap().to_str().unwrap()
+                );
                 println!("{}", warning.yellow());
                 continue;
             }

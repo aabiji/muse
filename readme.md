@@ -4,7 +4,7 @@ Muse is a cli background music player.
 `muse`        Output program info.  
 `muse play`   Play background music.  
 `muse pause`  Pause background music.  
-`muse stop`   Stops the background audio playback server.  
+`muse stop`   Stop the playback server.  
 
 ### Install
 To install:
@@ -25,9 +25,11 @@ sudo rm /usr/bin/muse
 Muse can be configured. The config is stored
 at `~/.muse.conf`. Here's all the possible options: 
 ```
-# Path to the folder containing the audio files
-# that will be played. The path needs to be absolute.
-audio_folder_path = "/path/to/audio_folder"
+# A list of directory paths that 
+# contain audio files to be played. The paths
+# need to be absolute. Muse will recursively 
+# search each directory path for audio files.
+audio_directories = ["/path/to/audio_directory"]
 
 # The order in which the audio files are played
 # Can be either "Random" or "Alphabetical".

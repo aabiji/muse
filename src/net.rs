@@ -5,18 +5,23 @@ use std::process::{exit, Command};
 use clap::Subcommand;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
+use strum_macros::Display;
 
 use crate::audio::Playback;
 
 pub const ADDR: &str = "127.0.0.1:1234";
-pub const SERVER_MODE_FLAG: &str = "--server-mode";
 
-#[derive(PartialEq, Subcommand, Serialize, Deserialize)]
+#[derive(PartialEq, Display, Subcommand, Serialize, Deserialize)]
+#[strum(serialize_all = "snake_case")]
 pub enum Request {
-    /// Play the background audio.
+    /// Play background music.
     Play,
-    /// Pause the background audio.
+    /// Pause background music.
     Pause,
+    /// Start the playback server.
+    /// The process will hang until
+    /// the server is shutdown.
+    Start,
     /// Stop the playback server.
     Stop,
 }
@@ -78,6 +83,7 @@ impl Server {
                 self.shutdown_requested = true;
                 self.playback.stop()
             }
+            _ => Ok(String::new()),
         };
 
         let response = match result {
@@ -120,9 +126,10 @@ impl Server {
 
         let exe_path = std::env::current_exe().unwrap();
         let path = exe_path.to_str().unwrap();
-        Command::new(path).arg(SERVER_MODE_FLAG).spawn().unwrap();
+        let cmd = Request::Start.to_string();
+        Command::new(path).arg(cmd).spawn().unwrap();
 
-        // TODO: fix this (why are we sleeping?)
+        // Wait for the server process to start and initialize.
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
