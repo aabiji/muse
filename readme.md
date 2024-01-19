@@ -1,5 +1,3 @@
-<style> th { display: none; } </style>
-
 Muse is a cli background music player.
 
 ### Usage
