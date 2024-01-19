@@ -1,13 +1,29 @@
+<style> th { display: none; } </style>
+
 Muse is a cli background music player.
 
 ### Usage
-`muse`        Output program info.  
-`muse play`   Play background music.  
-`muse pause`  Pause background music.  
-`muse stop`   Stop the playback server.  
+| Command       | Description                      |
+|---------------|----------------------------------|
+| **muse play** | Play background music.           |
+| **muse pause**| Pause background music.          |
+| **muse start**| Start the playback server.       |
+| **muse stop** | Stop the playback server.        |
 
-### Install
-To install:
+### Installation
+Install required dependencies:
+```
+# Arch based distro
+sudo pacman -S alsa-lib
+
+# Fedora based distro
+sudo dnf install alsa-lib-devel
+
+# Debian based distro
+sudo apt install libasaund2-dev
+```
+
+Install:
 ```
 git clone https://github.com/aabiji/muse
 cd muse
@@ -15,7 +31,7 @@ cargo build --release
 sudo mv target/release/muse /usr/bin/muse
 ```
 
-To uninstall:
+Uninstall:
 ```
 rm ~/.muse.conf
 sudo rm /usr/bin/muse
