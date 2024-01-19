@@ -128,7 +128,7 @@ impl Playback {
                 Err(_) => {
                     println!("{}", warning.yellow());
                     continue;
-                },
+                }
                 Ok(tags) => {
                     let duration = tags.properties().duration();
                     self.tracks.push(Track { path, duration });
@@ -204,11 +204,12 @@ impl Playback {
         Ok(String::from("Stopped audio playback."))
     }
 
-    pub fn stop(&mut self) -> Result<String, String> {
-        let duration = self.start_time.elapsed().unwrap();
-        self.config.start_point = duration.as_secs();
-        self.config.save();
-
+    pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
+        if save_config {
+            let duration = self.start_time.elapsed().unwrap();
+            self.config.start_point = duration.as_secs();
+            self.config.save();
+        }
         Ok(String::from("Stopped the playback server."))
     }
 }

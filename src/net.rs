@@ -81,7 +81,7 @@ impl Server {
             Request::Pause => self.playback.pause(),
             Request::Stop => {
                 self.shutdown_requested = true;
-                self.playback.stop()
+                self.playback.stop(true)
             }
             _ => Ok(String::new()),
         };
@@ -96,7 +96,7 @@ impl Server {
         write_data(&mut stream, data);
 
         if let Response::Error(_) = response {
-            self.playback.stop().unwrap();
+            self.playback.stop(false).unwrap();
             exit(1);
         }
     }
