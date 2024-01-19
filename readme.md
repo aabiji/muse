@@ -55,7 +55,7 @@ resume_playback = true
 # Number of seconds audio has been playing
 # Used to resume playback. This is a value set
 # by Muse so please don't edit this directly.
-starting_point = 0
+start_point = 0
 ```
 
 Muse is granted under the MIT liscense. Contributions are welcome!

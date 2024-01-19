@@ -107,6 +107,10 @@ impl Playback {
         for entry in directory {
             let entry = entry.unwrap();
             let path = entry.path();
+            if let None = path.extension() {
+                continue;
+            }
+
             let warning = format!(
                 "Couldn't load {}. {} files are not supported.",
                 path.to_str().unwrap(),
