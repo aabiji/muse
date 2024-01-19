@@ -102,6 +102,12 @@ impl Server {
     }
 
     pub fn run(&mut self) {
+        if Server::is_running() {
+            let msg = String::from("Audio server is already running.");
+            println!("{}", msg.red());
+            exit(1);
+        }
+
         let listener = TcpListener::bind(ADDR).unwrap();
         for stream in listener.incoming() {
             let stream = stream.unwrap();
