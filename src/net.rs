@@ -1,9 +1,11 @@
 use std::io::prelude::*;
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process::{exit, Command};
+use std::sync::{Arc, Mutex};
 
 use clap::Subcommand;
 use colored::Colorize;
+use mpris_server::{PlaybackStatus, Player};
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 
@@ -58,14 +60,14 @@ fn read_data(stream: &mut TcpStream) -> Vec<u8> {
 // executing them, returning a response.
 pub struct Server {
     shutdown_requested: bool,
-    playback: Playback,
+    playback: Arc<Mutex<Playback>>,
 }
 
 impl Server {
     pub fn new() -> Self {
         Self {
             shutdown_requested: false,
-            playback: Playback::new(),
+            playback: Arc::new(Mutex::new(Playback::new())),
         }
     }
 
@@ -77,11 +79,11 @@ impl Server {
         let request: Request = serde_json::from_slice(&buffer).unwrap();
 
         let result = match request {
-            Request::Play => self.playback.play(),
-            Request::Pause => self.playback.pause(),
+            Request::Play => self.playback.lock().unwrap().play(),
+            Request::Pause => self.playback.lock().unwrap().pause(),
             Request::Stop => {
                 self.shutdown_requested = true;
-                self.playback.stop(true)
+                self.playback.lock().unwrap().stop(true)
             }
             _ => Ok(String::new()),
         };
@@ -96,17 +98,54 @@ impl Server {
         write_data(&mut stream, data);
 
         if let Response::Error(_) = response {
-            self.playback.stop(false).unwrap();
+            self.playback.lock().unwrap().stop(false).unwrap();
             exit(1);
         }
     }
 
-    pub fn run(&mut self) {
+    async fn run_mpris_server(&mut self) -> Player {
+        let player = Player::builder("muse")
+            .can_play(true)
+            .can_pause(true)
+            .build()
+            .await
+            .unwrap();
+
+        let cloned = self.playback.clone();
+        player.connect_play(move |_| {
+            println!("Playing...");
+            cloned.lock().unwrap().play().unwrap();
+        });
+
+        let cloned = self.playback.clone();
+        player.connect_pause(move |_| {
+            cloned.lock().unwrap().pause().unwrap();
+        });
+
+        let cloned = self.playback.clone();
+        player.connect_play_pause(move |player| {
+            let status = player.playback_status();
+            if let PlaybackStatus::Playing = status {
+                cloned.lock().unwrap().pause().unwrap();
+            } else if let PlaybackStatus::Paused = status {
+                cloned.lock().unwrap().play().unwrap();
+            }
+        });
+
+        player
+    }
+
+    pub async fn run(&mut self) {
         if Server::is_running() {
             let msg = String::from("Audio server is already running.");
             println!("{}", msg.red());
             exit(1);
         }
+
+        // TODO: skip_duration is very slow
+        // TODO: whwat to do when we stop the server?
+        let player = self.run_mpris_server().await;
+        async_std::task::spawn_local(player.run());
 
         let listener = TcpListener::bind(ADDR).unwrap();
         for stream in listener.incoming() {

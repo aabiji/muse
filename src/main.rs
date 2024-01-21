@@ -11,12 +11,13 @@ struct Cli {
     command: net::Request,
 }
 
-fn main() {
+#[async_std::main]
+async fn main() {
     let cli = Cli::parse();
     match cli.command {
         net::Request::Start => {
             let mut server = net::Server::new();
-            server.run();
+            server.run().await;
         }
         arg => {
             let mut client = net::Client {};
