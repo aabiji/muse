@@ -11,7 +11,7 @@ struct Cli {
     command: net::Request,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     match cli.command {

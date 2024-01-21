@@ -103,7 +103,7 @@ impl Server {
         }
     }
 
-    async fn run_mpris_server(&mut self) -> Player {
+    async fn get_mpris_player(playback: Arc<Mutex<Playback>>) -> Player {
         let player = Player::builder("muse")
             .can_play(true)
             .can_pause(true)
@@ -111,18 +111,17 @@ impl Server {
             .await
             .unwrap();
 
-        let cloned = self.playback.clone();
+        let cloned = playback.clone();
         player.connect_play(move |_| {
-            println!("Playing...");
             cloned.lock().unwrap().play().unwrap();
         });
 
-        let cloned = self.playback.clone();
+        let cloned = playback.clone();
         player.connect_pause(move |_| {
             cloned.lock().unwrap().pause().unwrap();
         });
 
-        let cloned = self.playback.clone();
+        let cloned = playback.clone();
         player.connect_play_pause(move |player| {
             let status = player.playback_status();
             if let PlaybackStatus::Playing = status {
@@ -132,7 +131,23 @@ impl Server {
             }
         });
 
+        let cloned = playback.clone();
+        player.connect_stop(move |_| {
+            cloned.lock().unwrap().stop(true).unwrap();
+        });
+
         player
+    }
+
+    fn run_tcp(&mut self) {
+        let listener = TcpListener::bind(ADDR).unwrap();
+        for stream in listener.incoming() {
+            let stream = stream.unwrap();
+            self.send_response(stream);
+            if self.shutdown_requested {
+                break;
+            }
+        }
     }
 
     pub async fn run(&mut self) {
@@ -144,17 +159,15 @@ impl Server {
 
         // TODO: skip_duration is very slow
         // TODO: whwat to do when we stop the server?
-        let player = self.run_mpris_server().await;
-        async_std::task::spawn_local(player.run());
+        // TODO: maybe the tcp server should be async
+        println!("This runs ...");
 
-        let listener = TcpListener::bind(ADDR).unwrap();
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
-            self.send_response(stream);
-            if self.shutdown_requested {
-                break;
-            }
-        }
+        let clone = self.playback.clone();
+        let player = Server::get_mpris_player(clone).await;
+        player.run().await;
+
+        println!("This should run, but doesn't");
+        self.run_tcp();
     }
 
     fn is_running() -> bool {
