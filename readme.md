@@ -18,7 +18,7 @@ sudo pacman -S alsa-lib
 sudo dnf install alsa-lib-devel
 
 # Debian based distro
-sudo apt install libasaund2-dev
+sudo apt install libasound2-dev
 ```
 
 Install:
