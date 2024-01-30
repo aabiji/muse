@@ -10,6 +10,24 @@ use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
 use crate::config::{Config, PlaybackOrder};
 
+pub fn format_time(d: Duration) -> String {
+    let mut index = 0;
+    let mut n = d.as_secs_f64();
+    while n > 60.0 {
+        n /= 60.0;
+        index += 1;
+    }
+
+    let units = ["seconds", "minutes", "hours"];
+    let len = units[index].len() - 1;
+    let unit = if n <= 1.0 {
+        &units[index][..len]
+    } else {
+        units[index]
+    };
+    format!("{:.1} {}", n, unit)
+}
+
 fn is_supported_codec(file: &Path) -> bool {
     // Taken from the rodio readme
     let supported = ["mp3", "mp4", "wav", "ogg", "flac"];
@@ -209,11 +227,12 @@ impl Playback {
     }
 
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
+        let duration = self.start_time.elapsed().unwrap();
         if save_config {
-            let duration = self.start_time.elapsed().unwrap();
             self.config.start_point = duration.as_secs();
             self.config.save();
         }
-        Ok(String::from("Stopped the playback server."))
+        let msg = format!("Uptime: {}\nPlayback server stopped", format_time(duration));
+        Ok(msg)
     }
 }
