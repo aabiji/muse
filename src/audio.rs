@@ -48,13 +48,12 @@ pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
-
     config: Config,
     loaded_config: bool,
-    start_time: SystemTime, // The time at which playback is started
-
-    tracks: Vec<Track>,  // The tracks to be played
-    total_duration: u64, // Total duration of all the tracks
+    start_time: SystemTime,
+    tracks: Vec<Track>,
+    tracks_duration: u64,
+    current_track: Arc<Mutex<usize>>,
 }
 
 impl Playback {
@@ -65,13 +64,12 @@ impl Playback {
             _stream,
             _handle,
             sink: Arc::new(Mutex::new(sink)),
-
             loaded_config: false,
             config: Config::default(),
             start_time: SystemTime::now(),
-
             tracks: Vec::new(),
-            total_duration: 0,
+            current_track: Arc::new(Mutex::new(0)),
+            tracks_duration: 0,
         }
     }
 
@@ -91,8 +89,8 @@ impl Playback {
 
         // Assure that the resumption point is smaller than the
         // total length of all audio tracks
-        if self.config.start_point > self.total_duration {
-            self.config.start_point %= self.total_duration;
+        if self.config.start_point > self.tracks_duration {
+            self.config.start_point %= self.tracks_duration;
         }
 
         Ok(String::new())
@@ -154,7 +152,7 @@ impl Playback {
                 Ok(tags) => {
                     let duration = tags.properties().duration();
                     self.tracks.push(Track { path, duration });
-                    self.total_duration += duration.as_secs();
+                    self.tracks_duration += duration.as_secs();
                 }
             };
         }
@@ -171,26 +169,37 @@ impl Playback {
         sink.lock().unwrap().play();
     }
 
-    fn play_tracks(mut sink: Arc<Mutex<Sink>>, tracks: Vec<Track>, mut start: Duration) {
-        let mut current = 0;
+    fn play_tracks(
+        mut sink: Arc<Mutex<Sink>>,
+        tracks: Vec<Track>,
+        mut start: Duration,
+        current_track: Arc<Mutex<usize>>,
+    ) {
         loop {
             if !sink.lock().unwrap().empty() {
                 std::thread::sleep(Duration::from_secs(5));
                 continue;
             }
 
-            let track = &tracks[current];
+            let mut index = current_track.lock().unwrap();
+            let track = &tracks[*index];
             if start < track.duration {
                 Playback::play_track(&mut sink, &track.path, start);
             }
 
             start = start.saturating_sub(track.duration);
 
-            current += 1;
-            if current == tracks.len() {
-                current = 0;
+            *index += 1;
+            if *index == tracks.len() {
+                *index = 0;
             }
         }
+    }
+
+    fn format_output(&self, mode: &str) -> String {
+        let pathbuf = &self.tracks[*self.current_track.lock().unwrap()].path;
+        let path = pathbuf.file_name().unwrap().to_str().unwrap();
+        format!("{} {}", mode, path)
     }
 
     pub fn play(&mut self) -> Result<String, String> {
@@ -204,17 +213,18 @@ impl Playback {
         // For example: unpausing
         if !self.sink.lock().unwrap().empty() {
             self.sink.lock().unwrap().play();
-            return Ok(String::from("Starting audio playback ..."));
+            return Ok(self.format_output("Playing"));
         }
 
-        let cloned = self.sink.clone();
+        let sink = self.sink.clone();
         let tracks = self.tracks.clone();
+        let current = self.current_track.clone();
         let start = Duration::from_secs(self.config.start_point);
         std::thread::spawn(move || {
-            Playback::play_tracks(cloned, tracks, start);
+            Playback::play_tracks(sink, tracks, start, current);
         });
 
-        Ok(String::from("Starting audio playback ..."))
+        Ok(self.format_output("Playing"))
     }
 
     pub fn pause(&mut self) -> Result<String, String> {
@@ -223,7 +233,7 @@ impl Playback {
         }
 
         self.sink.lock().unwrap().pause();
-        Ok(String::from("Stopped audio playback."))
+        Ok(self.format_output("Pausing"))
     }
 
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
@@ -232,7 +242,8 @@ impl Playback {
             self.config.start_point = duration.as_secs();
             self.config.save();
         }
-        let msg = format!("Uptime: {}\nPlayback server stopped", format_time(duration));
+
+        let msg = format!("Uptime: {}\nPlayback stopped", format_time(duration));
         Ok(msg)
     }
 }
