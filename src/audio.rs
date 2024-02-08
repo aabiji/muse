@@ -239,7 +239,7 @@ impl Playback {
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
         let duration = self.start_time.elapsed().unwrap();
         if save_config {
-            self.config.start_point = duration.as_secs();
+            self.config.start_point += duration.as_secs();
             self.config.save();
         }
 
