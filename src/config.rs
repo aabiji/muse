@@ -26,8 +26,12 @@ impl Config {
         }
     }
 
+    // FIXME: Move this method out of the struct
+    //        refer to path field in the struct
     fn path() -> String {
         // Default config path: ~/.muse.conf
+        // FIXME: why are we doing this: converting from a pathbuf to a string, to a pathbuf again???
+        // TODO; can we replace the home dependency???
         let dir = home::home_dir().unwrap();
         let path_str = dir.display().to_string();
         let mut path = PathBuf::from(&path_str);
@@ -35,13 +39,18 @@ impl Config {
         String::from(path.to_str().unwrap())
     }
 
+    // Move this outside the struct
+    // Instead of changing the values in place, returned the parsed struct
     pub fn load(&mut self) -> Result<(), Box<dyn Error>> {
+        // TODO: create the config file if it doesn't already exist.
+        //       create a default list of audio folders
         let path = Config::path();
         if !Path::new(&path).exists() {
             self.save();
             return Ok(());
         }
 
+        // FIXME: refer to 'path' above. bubble up error if file doesn't exist.
         let file = std::fs::read_to_string(Config::path()).unwrap();
         let mut config: Config = toml::from_str(&file)?;
 
@@ -60,6 +69,7 @@ impl Config {
         Ok(())
     }
 
+    // Move this outside the struct
     pub fn save(&self) {
         let serialized = toml::to_string(&self).unwrap();
         std::fs::write(Config::path(), serialized).unwrap();

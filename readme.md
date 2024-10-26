@@ -1,5 +1,10 @@
 Muse is a cli background music player.
 
+Muse v2 checklist:
+- Install script
+- Bluetooth earbud pairing (pausing when disconnected?)
+- Refactor the codebase (make sure to replace all unwraps with proper error propagation)
+
 ### Usage
 | Command       | Description                      |
 |---------------|----------------------------------|
@@ -37,11 +42,11 @@ sudo rm /usr/bin/muse
 
 ### Config
 Muse can be configured. The config is stored
-at `~/.muse.conf`. Here's all the possible options: 
+at `~/.muse.conf`. Here's all the possible options:
 ```
-# A list of directory paths that 
+# A list of directory paths that
 # contain audio files to be played. The paths
-# need to be absolute. Muse will recursively 
+# need to be absolute. Muse will recursively
 # search each directory path for audio files.
 audio_directories = ["/path/to/audio_directory"]
 

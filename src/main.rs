@@ -1,6 +1,6 @@
 mod audio;
 mod config;
-mod net;
+mod net; // TODO: rename to ipc
 
 use clap::Parser;
 
@@ -9,6 +9,8 @@ use clap::Parser;
 struct Cli {
     #[command(subcommand)]
     command: net::Request,
+    // TODO: add a 'add URL' sub command
+    // TODO: add a 'uninstall' sub command
 }
 
 fn main() {

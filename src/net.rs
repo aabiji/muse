@@ -3,9 +3,9 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process::{exit, Command};
 
 use clap::Subcommand;
-use colored::Colorize;
+use colored::Colorize; // TODO: can we just use ansi escape sequences instead?
 use serde::{Deserialize, Serialize};
-use strum_macros::Display;
+use strum_macros::Display; // TODO: can't we just use serde??
 
 use crate::audio::Playback;
 
@@ -40,6 +40,7 @@ fn write_data(stream: &mut TcpStream, data: Vec<u8>) {
     stream.flush().unwrap();
 }
 
+// TODO: Is it worth it to implement a read_to_end function?
 fn read_data(stream: &mut TcpStream) -> Vec<u8> {
     // Custom wire format used to transfer data
     // between the client and server: [ LENGTH, DATA ]
@@ -69,9 +70,10 @@ impl Server {
         }
     }
 
+    // TODO: rename to handle_request
     fn send_response(&mut self, mut stream: TcpStream) {
         let mut buffer: Vec<u8> = Vec::new();
-        stream.read(&mut buffer).unwrap();
+        stream.read(&mut buffer).unwrap(); // TODO: why are we calling this???
 
         let buffer = read_data(&mut stream);
         let request: Request = serde_json::from_slice(&buffer).unwrap();
@@ -80,7 +82,7 @@ impl Server {
             Request::Play => self.playback.play(),
             Request::Pause => self.playback.pause(),
             Request::Stop => {
-                self.shutdown_requested = true;
+                self.shutdown_requested = true; // FIXME: maybe just return true instead
                 self.playback.stop(true)
             }
             _ => Ok(String::new()),
@@ -125,6 +127,7 @@ impl Server {
         false
     }
 
+    // TODO: rename to spawn_background_process
     fn spawn_process() {
         if Server::is_running() {
             return;
@@ -132,7 +135,7 @@ impl Server {
 
         let exe_path = std::env::current_exe().unwrap();
         let path = exe_path.to_str().unwrap();
-        let cmd = Request::Start.to_string();
+        let cmd = Request::Start.to_string(); // we could always just say "start"
         Command::new(path).arg(cmd).spawn().unwrap();
 
         // Wait for the server process to start and initialize.
