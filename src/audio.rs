@@ -8,7 +8,7 @@ use colored::Colorize;
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
-use crate::config::{Config, PlaybackOrder};
+use crate::config;
 
 pub fn format_time(d: Duration) -> String {
     let mut index = 0;
@@ -51,7 +51,7 @@ pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
-    config: Config,
+    config: config::Config,
     loaded_config: bool, // TODO: just make config an option
     start_time: SystemTime,
     tracks: Vec<Track>,
@@ -68,7 +68,7 @@ impl Playback {
             _handle,
             sink: Arc::new(Mutex::new(sink)),
             loaded_config: false,
-            config: Config::default(),
+            config: config::Config::new(),
             start_time: SystemTime::now(),
             tracks: Vec::new(),
             current_track: Arc::new(Mutex::new(0)),
@@ -81,13 +81,15 @@ impl Playback {
             return Ok(String::new());
         }
 
-        if let Err(err) = self.config.load() {
+        let result = config::load();
+        if let Err(err) = result {
             return Err(err.to_string());
         }
+        self.config = result.unwrap();
 
         self.load_tracks();
         if self.tracks.len() == 0 {
-            return Err(String::from("No audio directories specified."));
+            return Err(String::from("Couldn't read any audio files"));
         }
 
         // Assure that the resumption point is smaller than the
@@ -109,8 +111,8 @@ impl Playback {
         };
 
         match self.config.playback_order {
-            PlaybackOrder::Alphabetical => self.tracks.sort_by(alpha_sort),
-            PlaybackOrder::Random => {}
+            config::PlaybackOrder::Alphabetical => self.tracks.sort_by(alpha_sort),
+            config::PlaybackOrder::Random => {}
         };
     }
 
@@ -256,7 +258,7 @@ impl Playback {
         let duration = self.start_time.elapsed().unwrap();
         if save_config {
             self.config.start_point += duration.as_secs(); // TODO: clamp here (init() : line 95)
-            self.config.save();
+            config::save(&self.config);
         }
 
         let msg = format!("Uptime: {}\nPlayback stopped", format_time(duration));
