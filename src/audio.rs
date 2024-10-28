@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use colored::Colorize;
+use crate::util;
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
@@ -149,7 +149,7 @@ impl Playback {
             }
 
             if !is_supported_codec(&path) {
-                println!("{}", warning.yellow());
+                util::log(warning, util::LogType::Warning);
                 continue;
             }
 
@@ -158,7 +158,7 @@ impl Playback {
             let result = lofty::read_from_path(&path);
             match result {
                 Err(_) => {
-                    println!("{}", warning.yellow());
+                    util::log(warning, util::LogType::Warning);
                     continue;
                 }
                 Ok(tags) => {

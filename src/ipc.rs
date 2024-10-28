@@ -3,16 +3,14 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process::{exit, Command};
 
 use clap::Subcommand;
-use colored::Colorize; // TODO: can we just use ansi escape sequences instead?
 use serde::{Deserialize, Serialize};
-use strum_macros::Display; // TODO: can't we just use serde??
 
+use crate::util;
 use crate::audio::Playback;
 
 pub const ADDR: &str = "127.0.0.1:1234";
 
-#[derive(PartialEq, Display, Subcommand, Serialize, Deserialize)]
-#[strum(serialize_all = "snake_case")]
+#[derive(PartialEq, Subcommand, Serialize, Deserialize)]
 pub enum Request {
     /// Play background music.
     Play,
@@ -58,20 +56,19 @@ fn read_data(stream: &mut TcpStream) -> Vec<u8> {
 // Responsible for receiving client commands and
 // executing them, returning a response.
 pub struct Server {
-    shutdown_requested: bool,
     playback: Playback,
 }
 
 impl Server {
     pub fn new() -> Self {
         Self {
-            shutdown_requested: false,
             playback: Playback::new(),
         }
     }
 
-    // TODO: rename to handle_request
-    fn send_response(&mut self, mut stream: TcpStream) {
+    fn handle_request(&mut self, mut stream: TcpStream) -> bool {
+        let mut shutdown = false;
+
         let mut buffer: Vec<u8> = Vec::new();
         stream.read(&mut buffer).unwrap(); // TODO: why are we calling this???
 
@@ -82,7 +79,7 @@ impl Server {
             Request::Play => self.playback.play(),
             Request::Pause => self.playback.pause(),
             Request::Stop => {
-                self.shutdown_requested = true; // FIXME: maybe just return true instead
+                shutdown = true;
                 self.playback.stop(true)
             }
             _ => Ok(String::new()),
@@ -101,20 +98,20 @@ impl Server {
             self.playback.stop(false).unwrap();
             exit(1);
         }
+
+        shutdown
     }
 
     pub fn run(&mut self) {
         if Server::is_running() {
-            let msg = String::from("Audio server is already running.");
-            println!("{}", msg.red());
+            util::log("Audio server is already running".to_string(), util::LogType::Error);
             exit(1);
         }
 
         let listener = TcpListener::bind(ADDR).unwrap();
         for stream in listener.incoming() {
             let stream = stream.unwrap();
-            self.send_response(stream);
-            if self.shutdown_requested {
+            if self.handle_request(stream) {
                 break;
             }
         }
@@ -127,16 +124,14 @@ impl Server {
         false
     }
 
-    // TODO: rename to spawn_background_process
-    fn spawn_process() {
+    fn spawn_background_process() {
         if Server::is_running() {
             return;
         }
 
         let exe_path = std::env::current_exe().unwrap();
         let path = exe_path.to_str().unwrap();
-        let cmd = Request::Start.to_string(); // we could always just say "start"
-        Command::new(path).arg(cmd).spawn().unwrap();
+        Command::new(path).arg("start").spawn().unwrap();
 
         // Wait for the server process to start and initialize.
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -164,16 +159,15 @@ impl Client {
 
     pub fn run(&mut self, request: Request) {
         if !Server::is_running() && request == Request::Stop {
-            let msg = String::from("No audio server is running.");
-            println!("{}", msg.red());
+            util::log("No audio server is running".to_string(), util::LogType::Error);
             return;
         }
 
-        Server::spawn_process();
+        Server::spawn_background_process();
 
         match self.send_request(request) {
-            Response::Success(msg) => println!("{}", msg.green()),
-            Response::Error(msg) => println!("{}", msg.red()),
+            Response::Success(msg) => util::log(msg, util::LogType::Info),
+            Response::Error(msg) => util::log(msg, util::LogType::Error),
         };
     }
 }
