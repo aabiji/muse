@@ -3,7 +3,7 @@ name = "muse"
 edition = "2021"
 version = "0.1.0"
 authors = ["Abigail Adegbiji <adegbijiabigail@gmail.com>"]
-description = "Muse is a cli background music player.\nSee https://github.com/aabiji/muse for more info."
+description = "Muse is a cli music player.\nSee https://github.com/aabiji/muse for more info."
 
 [dependencies]
 home = "0.5.9"
