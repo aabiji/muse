@@ -10,16 +10,15 @@ use clap::Parser;
 struct Cli {
     #[command(subcommand)]
     command: ipc::Request,
-    // TODO: add a 'add URL' sub command
-    // TODO: add a 'uninstall' sub command
 }
 
 /*
 Muse v2 checklist:
 - Install script
-- Bluetooth earbud pairing (pausing when disconnected?)
-- Refactor the codebase (make sure to replace all unwraps with proper error propagation)
-- TODO: rewrite the readme
+- Pause playback when bluetooth earbuds are disconnected
+- Refactor the codebase (make sure to replace all major unwraps with proper error propagation)
+- 'add URL' sub command
+- 'uninstall' sub command
 */
 
 fn main() {

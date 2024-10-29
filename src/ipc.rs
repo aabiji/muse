@@ -12,15 +12,16 @@ pub const ADDR: &str = "127.0.0.1:1234";
 
 #[derive(PartialEq, Subcommand, Serialize, Deserialize)]
 pub enum Request {
-    /// Play background music.
+    /// Play audio
     Play,
-    /// Pause background music.
+    /// Pause audio
     Pause,
     /// Start the playback server.
-    /// The process will hang until
-    /// the server is shutdown.
+    // The process will hang until
+    // the server is shutdown
     Start,
-    /// Stop the playback server.
+    /// Stop audio.
+    // Stop the playback server
     Stop,
 }
 
@@ -38,7 +39,6 @@ fn write_data(stream: &mut TcpStream, data: Vec<u8>) {
     stream.flush().unwrap();
 }
 
-// TODO: Is it worth it to implement a read_to_end function?
 fn read_data(stream: &mut TcpStream) -> Vec<u8> {
     // Custom wire format used to transfer data
     // between the client and server: [ LENGTH, DATA ]
@@ -68,10 +68,6 @@ impl Server {
 
     fn handle_request(&mut self, mut stream: TcpStream) -> bool {
         let mut shutdown = false;
-
-        let mut buffer: Vec<u8> = Vec::new();
-        stream.read(&mut buffer).unwrap(); // TODO: why are we calling this???
-
         let buffer = read_data(&mut stream);
         let request: Request = serde_json::from_slice(&buffer).unwrap();
 

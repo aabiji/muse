@@ -1,4 +1,4 @@
-Muse is a cli music player. Just enter `muse play` and play away!
+Muse is a cli audio player. Just enter `muse play` and play away!
 
 ### Installation
 ```
