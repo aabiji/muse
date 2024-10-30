@@ -1,6 +1,7 @@
 mod audio;
 mod config;
-mod net;
+mod ipc;
+mod util;
 
 use clap::Parser;
 
@@ -8,18 +9,18 @@ use clap::Parser;
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: net::Request,
+    command: ipc::Request,
 }
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        net::Request::Start => {
-            let mut server = net::Server::new();
+        ipc::Request::Start => {
+            let mut server = ipc::Server::new();
             server.run();
         }
         arg => {
-            let mut client = net::Client {};
+            let mut client = ipc::Client {};
             client.run(arg);
         }
     };

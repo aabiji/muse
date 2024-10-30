@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use colored::Colorize;
+use crate::util;
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
-use crate::config::{Config, PlaybackOrder};
+use crate::config;
 
 pub fn format_time(d: Duration) -> String {
     let mut index = 0;
@@ -19,17 +19,14 @@ pub fn format_time(d: Duration) -> String {
     }
 
     let units = ["seconds", "minutes", "hours"];
-    let len = units[index].len() - 1;
-    let unit = if n <= 1.0 {
-        &units[index][..len]
-    } else {
-        units[index]
-    };
+    let mut unit = String::from(units[index]);
+    if n <= 1.0 {
+        unit.pop();
+    }
     format!("{:.1} {}", n, unit)
 }
 
 fn is_supported_codec(file: &Path) -> bool {
-    // Taken from the rodio readme
     let supported = ["mp3", "mp4", "wav", "ogg", "flac"];
     let extension = file.extension().unwrap().to_str().unwrap();
     if !supported.contains(&extension) {
@@ -48,7 +45,7 @@ pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
-    config: Config,
+    config: config::Config,
     loaded_config: bool,
     start_time: SystemTime,
     tracks: Vec<Track>,
@@ -64,8 +61,8 @@ impl Playback {
             _stream,
             _handle,
             sink: Arc::new(Mutex::new(sink)),
+            config: config::Config::new(),
             loaded_config: false,
-            config: Config::default(),
             start_time: SystemTime::now(),
             tracks: Vec::new(),
             current_track: Arc::new(Mutex::new(0)),
@@ -78,44 +75,32 @@ impl Playback {
             return Ok(String::new());
         }
 
-        if let Err(err) = self.config.load() {
+        let result = config::load();
+        if let Err(err) = result {
             return Err(err.to_string());
         }
+        self.config = result.unwrap();
+        self.loaded_config = true;
 
         self.load_tracks();
         if self.tracks.len() == 0 {
-            return Err(String::from("No audio directories specified."));
-        }
-
-        // Assure that the resumption point is smaller than the
-        // total length of all audio tracks
-        if self.config.start_point > self.tracks_duration {
-            self.config.start_point %= self.tracks_duration;
+            return Err(String::from("Couldn't read any audio files"));
         }
 
         Ok(String::new())
     }
 
-    fn sort_tracks(&mut self) {
-        let alpha_sort = |t1: &Track, t2: &Track| {
-            let a = t1.path.file_name().unwrap().to_ascii_lowercase();
-            let b = t2.path.file_name().unwrap().to_ascii_lowercase();
-            a.cmp(&b)
-        };
-
-        match self.config.playback_order {
-            PlaybackOrder::Alphabetical => self.tracks.sort_by(alpha_sort),
-            PlaybackOrder::Random => {}
-        };
-    }
-
     fn load_tracks(&mut self) {
-        let dir = self.config.audio_directories.clone();
-        for path in dir {
+        let directories = self.config.audio_directories.clone();
+        for path in directories {
             self.read_tracks(&Path::new(&path));
         }
 
-        self.sort_tracks();
+        // Sort tracks if necessary
+        match self.config.playback_order {
+            config::PlaybackOrder::Alphabetical => self.tracks.sort_by_key(|t| t.path.clone()),
+            config::PlaybackOrder::Random => {}
+        };
     }
 
     fn read_tracks(&mut self, directory: &Path) {
@@ -127,26 +112,26 @@ impl Playback {
                 continue;
             }
 
+            if entry.metadata().unwrap().is_dir() {
+                self.read_tracks(&entry.path());
+                continue;
+            }
+
             let warning = format!(
                 "Couldn't load {}. {} files are not supported.",
                 path.to_str().unwrap(),
                 path.extension().unwrap().to_str().unwrap()
             );
 
-            if entry.metadata().unwrap().is_dir() {
-                self.read_tracks(&entry.path());
-                continue;
-            }
-
             if !is_supported_codec(&path) {
-                println!("{}", warning.yellow());
+                util::log(warning, util::LogType::Warning);
                 continue;
             }
 
             let result = lofty::read_from_path(&path);
             match result {
                 Err(_) => {
-                    println!("{}", warning.yellow());
+                    util::log(warning, util::LogType::Warning);
                     continue;
                 }
                 Ok(tags) => {
@@ -237,10 +222,11 @@ impl Playback {
     }
 
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
+        self.sink.lock().unwrap().stop();
         let duration = self.start_time.elapsed().unwrap();
         if save_config {
-            self.config.start_point += duration.as_secs();
-            self.config.save();
+            self.config.clamp_seek_start(duration.as_secs(), self.tracks_duration);
+            config::save(&self.config);
         }
 
         let msg = format!("Uptime: {}\nPlayback stopped", format_time(duration));

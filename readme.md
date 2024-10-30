@@ -1,16 +1,9 @@
-Muse is a cli background music player.
-
-### Usage
-| Command       | Description                      |
-|---------------|----------------------------------|
-| **muse play** | Play background music.           |
-| **muse pause**| Pause background music.          |
-| **muse start**| Start the playback server.       |
-| **muse stop** | Stop the playback server.        |
+Muse is a cli audio player. Just enter `muse play` and play away!
 
 ### Installation
-Install required dependencies:
 ```
+# 1. Install the required dependencies:
+
 # Arch based distro
 sudo pacman -S alsa-lib
 
@@ -19,29 +12,21 @@ sudo dnf install alsa-lib-devel
 
 # Debian based distro
 sudo apt install libasound2-dev
-```
 
-Install:
-```
+# 2. Install:
+
 git clone https://github.com/aabiji/muse
-cd muse
-cargo build --release
+cd muse && cargo build --release
 sudo mv target/release/muse /usr/bin/muse
-```
-
-Uninstall:
-```
-rm ~/.muse.conf
-sudo rm /usr/bin/muse
 ```
 
 ### Config
 Muse can be configured. The config is stored
-at `~/.muse.conf`. Here's all the possible options: 
-```
-# A list of directory paths that 
+at `~/.muse.conf`. Here's all the possible options:
+```toml
+# A list of directory paths that
 # contain audio files to be played. The paths
-# need to be absolute. Muse will recursively 
+# need to be absolute. Muse will recursively
 # search each directory path for audio files.
 audio_directories = ["/path/to/audio_directory"]
 

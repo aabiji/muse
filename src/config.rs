@@ -2,6 +2,16 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
+const AUDIO_FOLDER: &str = "Music";
+const CONFIG_FILE: &str = ".muse.conf";
+
+fn home_path(entry: &str) -> String {
+    let home_directory = home::home_dir().unwrap();
+    let mut base = PathBuf::from(home_directory);
+    base.push(entry);
+    base.to_str().unwrap().to_string()
+}
+
 #[derive(Serialize, Deserialize)]
 pub enum PlaybackOrder {
     Random,
@@ -17,51 +27,56 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         Config {
             start_point: 0,
             resume_playback: true,
-            audio_directories: Vec::new(),
             playback_order: PlaybackOrder::Random,
+            audio_directories: vec![home_path(AUDIO_FOLDER)],
         }
     }
 
-    fn path() -> String {
-        // Default config path: ~/.muse.conf
-        let dir = home::home_dir().unwrap();
-        let path_str = dir.display().to_string();
-        let mut path = PathBuf::from(&path_str);
-        path.push(".muse.conf");
-        String::from(path.to_str().unwrap())
+    pub fn clamp_seek_start(&mut self, duration: u64, total_duration: u64) {
+        self.start_point += duration;
+        if self.start_point >= total_duration {
+            self.start_point %= total_duration;
+        }
+    }
+}
+
+
+pub fn save(config: &Config) {
+    let serialized = toml::to_string(config).unwrap();
+    std::fs::write(home_path(CONFIG_FILE), serialized).unwrap();
+}
+
+pub fn load() -> Result<Config, Box<dyn Error>> {
+    // Create the config file if it doesn't already exist
+    let path = home_path(CONFIG_FILE);
+    if !Path::new(&path).exists() {
+        let default = Config::new();
+        save(&default);
+        return Ok(default);
     }
 
-    pub fn load(&mut self) -> Result<(), Box<dyn Error>> {
-        let path = Config::path();
+    let file = std::fs::read_to_string(path)?;
+    let mut config: Config = toml::from_str(&file)?;
+
+    if !config.resume_playback {
+        config.start_point = 0;
+    }
+
+    if config.audio_directories.is_empty() {
+        // Fallback to the default
+        config.audio_directories = vec![home_path(AUDIO_FOLDER)];
+    }
+
+    for path in &config.audio_directories {
         if !Path::new(&path).exists() {
-            self.save();
-            return Ok(());
+            let msg = format!("{} not found.", path);
+            return Err(Box::<dyn Error>::from(msg));
         }
-
-        let file = std::fs::read_to_string(Config::path()).unwrap();
-        let mut config: Config = toml::from_str(&file)?;
-
-        if !config.resume_playback {
-            config.start_point = 0;
-        }
-
-        for path in &config.audio_directories {
-            if !Path::new(&path).exists() {
-                let msg = format!("Path to audio folder ({}) not found.", path);
-                return Err(Box::<dyn Error>::from(msg));
-            }
-        }
-
-        *self = config;
-        Ok(())
     }
 
-    pub fn save(&self) {
-        let serialized = toml::to_string(&self).unwrap();
-        std::fs::write(Config::path(), serialized).unwrap();
-    }
+    Ok(config)
 }
