@@ -35,6 +35,13 @@ impl Config {
             audio_directories: vec![home_path(AUDIO_FOLDER)],
         }
     }
+
+    pub fn clamp_seek_start(&mut self, duration: u64, total_duration: u64) {
+        self.start_point += duration;
+        if self.start_point >= total_duration {
+            self.start_point %= total_duration;
+        }
+    }
 }
 
 

@@ -12,15 +12,6 @@ struct Cli {
     command: ipc::Request,
 }
 
-/*
-Muse v2 checklist:
-- Install script
-- Pause playback when bluetooth earbuds are disconnected
-- Refactor the codebase (make sure to replace all major unwraps with proper error propagation)
-- 'add URL' sub command
-- 'uninstall' sub command
-*/
-
 fn main() {
     let cli = Cli::parse();
     match cli.command {

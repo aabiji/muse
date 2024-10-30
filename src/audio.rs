@@ -19,20 +19,14 @@ pub fn format_time(d: Duration) -> String {
     }
 
     let units = ["seconds", "minutes", "hours"];
-    // TODO: make it more clear we're conditionally removing the 's'
-    let len = units[index].len() - 1;
-    let unit = if n <= 1.0 {
-        &units[index][..len]
-    } else {
-        units[index]
-    };
+    let mut unit = String::from(units[index]);
+    if n <= 1.0 {
+        unit.pop();
+    }
     format!("{:.1} {}", n, unit)
 }
 
 fn is_supported_codec(file: &Path) -> bool {
-    // Taken from the rodio readme
-    // TODO: can we just use cpal and synphonia to get more control over
-    //       playback and supported formats (supporting opus, etc???
     let supported = ["mp3", "mp4", "wav", "ogg", "flac"];
     let extension = file.extension().unwrap().to_str().unwrap();
     if !supported.contains(&extension) {
@@ -52,7 +46,7 @@ pub struct Playback {
     _handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
     config: config::Config,
-    loaded_config: bool, // TODO: just make config an option
+    loaded_config: bool,
     start_time: SystemTime,
     tracks: Vec<Track>,
     tracks_duration: u64,
@@ -67,8 +61,8 @@ impl Playback {
             _stream,
             _handle,
             sink: Arc::new(Mutex::new(sink)),
-            loaded_config: false,
             config: config::Config::new(),
+            loaded_config: false,
             start_time: SystemTime::now(),
             tracks: Vec::new(),
             current_track: Arc::new(Mutex::new(0)),
@@ -86,43 +80,27 @@ impl Playback {
             return Err(err.to_string());
         }
         self.config = result.unwrap();
+        self.loaded_config = true;
 
         self.load_tracks();
         if self.tracks.len() == 0 {
             return Err(String::from("Couldn't read any audio files"));
         }
 
-        // Assure that the resumption point is smaller than the
-        // total length of all audio tracks
-        if self.config.start_point > self.tracks_duration {
-            self.config.start_point %= self.tracks_duration;
-        }
-
         Ok(String::new())
     }
 
-    // TODO: move this below the read_tracks function
-    fn sort_tracks(&mut self) {
-        // TODO: use sort_by_key instead
-        let alpha_sort = |t1: &Track, t2: &Track| {
-            let a = t1.path.file_name().unwrap().to_ascii_lowercase();
-            let b = t2.path.file_name().unwrap().to_ascii_lowercase();
-            a.cmp(&b)
-        };
-
-        match self.config.playback_order {
-            config::PlaybackOrder::Alphabetical => self.tracks.sort_by(alpha_sort),
-            config::PlaybackOrder::Random => {}
-        };
-    }
-
     fn load_tracks(&mut self) {
-        let dir = self.config.audio_directories.clone(); // FIXME: don't clone
-        for path in dir {
+        let directories = self.config.audio_directories.clone();
+        for path in directories {
             self.read_tracks(&Path::new(&path));
         }
 
-        self.sort_tracks();
+        // Sort tracks if necessary
+        match self.config.playback_order {
+            config::PlaybackOrder::Alphabetical => self.tracks.sort_by_key(|t| t.path.clone()),
+            config::PlaybackOrder::Random => {}
+        };
     }
 
     fn read_tracks(&mut self, directory: &Path) {
@@ -130,31 +108,26 @@ impl Playback {
         for entry in directory {
             let entry = entry.unwrap();
             let path = entry.path();
-            // FIXME: if the entry was a directory there wouldn't be a file extension
-            //        is this stopping us from recursing???
             if let None = path.extension() {
                 continue;
             }
-
-            // TODO: move this down after the next if statement
-            let warning = format!(
-                "Couldn't load {}. {} files are not supported.",
-                path.to_str().unwrap(),
-                path.extension().unwrap().to_str().unwrap()
-            );
 
             if entry.metadata().unwrap().is_dir() {
                 self.read_tracks(&entry.path());
                 continue;
             }
 
+            let warning = format!(
+                "Couldn't load {}. {} files are not supported.",
+                path.to_str().unwrap(),
+                path.extension().unwrap().to_str().unwrap()
+            );
+
             if !is_supported_codec(&path) {
                 util::log(warning, util::LogType::Warning);
                 continue;
             }
 
-            // TODO: can we read file metadata from symphonia instead?
-            //       is this slow???
             let result = lofty::read_from_path(&path);
             match result {
                 Err(_) => {
@@ -175,12 +148,10 @@ impl Playback {
         let reader = BufReader::new(file);
 
         let source = Decoder::new(reader).unwrap();
-        // TODO: is this the slow part??? What can we do about it?
         let source = source.skip_duration(starting_point);
 
-        // TODO: rewrite
         sink.lock().unwrap().append(source);
-        sink.lock().unwrap().play(); // TODO is the source removed from memory when it's done playing???
+        sink.lock().unwrap().play();
     }
 
     fn play_tracks(
@@ -211,17 +182,14 @@ impl Playback {
     }
 
     fn format_output(&self, mode: &str) -> String {
-        // FIXME: make this more clear
         let pathbuf = &self.tracks[*self.current_track.lock().unwrap()].path;
         let path = pathbuf.file_name().unwrap().to_str().unwrap();
-        format!("{} {}", mode, path) // TODO: add current playback time
+        format!("{} {}", mode, path)
     }
 
     pub fn play(&mut self) -> Result<String, String> {
         self.init()?;
 
-        // TODO: does this inadvertantly terminate the server??? even if it's an error we want to signal
-        //       to the user, we don't want the server to stop in this case
         if !self.sink.lock().unwrap().empty() && !self.sink.lock().unwrap().is_paused() {
             return Err(String::from("Audio is already playing."));
         }
@@ -236,7 +204,7 @@ impl Playback {
         let sink = self.sink.clone();
         let tracks = self.tracks.clone();
         let current = self.current_track.clone();
-        let start = Duration::from_secs(self.config.start_point); // FIXME: start_point should already be a duration
+        let start = Duration::from_secs(self.config.start_point);
         std::thread::spawn(move || {
             Playback::play_tracks(sink, tracks, start, current);
         });
@@ -254,10 +222,10 @@ impl Playback {
     }
 
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
-        // TODO: stop the sink
+        self.sink.lock().unwrap().stop();
         let duration = self.start_time.elapsed().unwrap();
         if save_config {
-            self.config.start_point += duration.as_secs(); // TODO: clamp here (init() : line 95)
+            self.config.clamp_seek_start(duration.as_secs(), self.tracks_duration);
             config::save(&self.config);
         }
 
