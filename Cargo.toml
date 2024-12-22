@@ -1,7 +1,7 @@
 [package]
 name = "muse"
 edition = "2021"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Abigail Adegbiji <adegbijiabigail@gmail.com>"]
 description = "Muse is a cli audio player.\nSee https://github.com/aabiji/muse for more info."
 
@@ -13,3 +13,4 @@ rodio = "0.17.3"
 serde_json = "1.0.111"
 clap = { version = "4.4.18", features = ["derive"] }
 serde = { version = "1.0.195", features = ["derive"] }
+rand = "0.8.5"
