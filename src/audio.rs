@@ -4,36 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use crate::util;
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
+use crate::util;
 use crate::config;
-
-pub fn format_time(d: Duration) -> String {
-    let mut index = 0;
-    let mut n = d.as_secs_f64();
-    while n > 60.0 {
-        n /= 60.0;
-        index += 1;
-    }
-
-    let units = ["seconds", "minutes", "hours"];
-    let mut unit = String::from(units[index]);
-    if n <= 1.0 {
-        unit.pop();
-    }
-    format!("{:.1} {}", n, unit)
-}
-
-fn is_supported_codec(file: &Path) -> bool {
-    let supported = ["mp3", "mp4", "wav", "ogg", "flac"];
-    let extension = file.extension().unwrap().to_str().unwrap();
-    if !supported.contains(&extension) {
-        return false;
-    }
-    true
-}
 
 #[derive(Clone)]
 struct Track {
@@ -45,9 +20,12 @@ pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
-    config: config::Config,
-    loaded_config: bool,
+
+    config: Option<config::Config>,
+
     start_time: SystemTime,
+    uptime: Duration,
+
     tracks: Vec<Track>,
     tracks_duration: u64,
     current_track: Arc<Mutex<usize>>,
@@ -61,17 +39,20 @@ impl Playback {
             _stream,
             _handle,
             sink: Arc::new(Mutex::new(sink)),
-            config: config::Config::new(),
-            loaded_config: false,
+
+            config: None,
+
             start_time: SystemTime::now(),
+            uptime: Duration::new(0, 0),
+
             tracks: Vec::new(),
-            current_track: Arc::new(Mutex::new(0)),
             tracks_duration: 0,
+            current_track: Arc::new(Mutex::new(0)),
         }
     }
 
     fn init(&mut self) -> Result<String, String> {
-        if self.loaded_config {
+        if let Some(_) = self.config {
             return Ok(String::new());
         }
 
@@ -79,8 +60,7 @@ impl Playback {
         if let Err(err) = result {
             return Err(err.to_string());
         }
-        self.config = result.unwrap();
-        self.loaded_config = true;
+        self.config = Some(result.unwrap());
 
         self.load_tracks();
         if self.tracks.len() == 0 {
@@ -91,13 +71,15 @@ impl Playback {
     }
 
     fn load_tracks(&mut self) {
-        let directories = self.config.audio_directories.clone();
+        let directories = self.config.as_ref().unwrap().audio_directories.clone();
         for path in directories {
             self.read_tracks(&Path::new(&path));
         }
 
         // Sort tracks if necessary
-        match self.config.playback_order {
+        // TODO: randomize tracks
+        let order = &self.config.as_ref().unwrap().playback_order;
+        match order {
             config::PlaybackOrder::Alphabetical => self.tracks.sort_by_key(|t| t.path.clone()),
             config::PlaybackOrder::Random => {}
         };
@@ -123,7 +105,7 @@ impl Playback {
                 path.extension().unwrap().to_str().unwrap()
             );
 
-            if !is_supported_codec(&path) {
+            if !util::is_supported_codec(&path) {
                 util::log(warning, util::LogType::Warning);
                 continue;
             }
@@ -181,35 +163,40 @@ impl Playback {
         }
     }
 
-    fn format_output(&self, mode: &str) -> String {
+    fn get_current_track(&self) -> String {
         let pathbuf = &self.tracks[*self.current_track.lock().unwrap()].path;
         let path = pathbuf.file_name().unwrap().to_str().unwrap();
-        format!("{} {}", mode, path)
+        path.to_string()
     }
 
     pub fn play(&mut self) -> Result<String, String> {
         self.init()?;
 
         if !self.sink.lock().unwrap().empty() && !self.sink.lock().unwrap().is_paused() {
+            // TODO: we shouldn't shut down here
             return Err(String::from("Audio is already playing."));
         }
+
+        self.start_time = SystemTime::now();
 
         // Continue playback if we don't have to load a new track
         // For example: unpausing
         if !self.sink.lock().unwrap().empty() {
             self.sink.lock().unwrap().play();
-            return Ok(self.format_output("Playing"));
+            return Ok(format!("Unpausing {}", self.get_current_track()));
         }
 
         let sink = self.sink.clone();
         let tracks = self.tracks.clone();
         let current = self.current_track.clone();
-        let start = Duration::from_secs(self.config.start_point);
+
+        let start_point = self.config.as_ref().unwrap().start_point;
+        let start = Duration::from_secs(start_point);
+
         std::thread::spawn(move || {
             Playback::play_tracks(sink, tracks, start, current);
         });
-
-        Ok(self.format_output("Playing"))
+        Ok(format!("Playing {}", self.get_current_track()))
     }
 
     pub fn pause(&mut self) -> Result<String, String> {
@@ -217,19 +204,32 @@ impl Playback {
             return Err(String::from("No audio is playing."));
         }
 
+        let elapsed = self.start_time.elapsed().unwrap();
+        self.uptime += elapsed;
+
         self.sink.lock().unwrap().pause();
-        Ok(self.format_output("Pausing"))
+        let msg = format!(
+            "Pausing {} after {}",
+            self.get_current_track(),
+            util::format_time(self.uptime)
+        );
+        Ok(msg)
     }
 
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
         self.sink.lock().unwrap().stop();
-        let duration = self.start_time.elapsed().unwrap();
-        if save_config {
-            self.config.clamp_seek_start(duration.as_secs(), self.tracks_duration);
-            config::save(&self.config);
+
+        let elapsed = self.start_time.elapsed().unwrap();
+        self.uptime += elapsed;
+
+        if let Some(config) = &mut self.config {
+            if save_config {
+                config.clamp_seek_start(self.uptime.as_secs(), self.tracks_duration);
+                config::save(&config);
+            }
         }
 
-        let msg = format!("Uptime: {}\nPlayback stopped", format_time(duration));
+        let msg = format!("Playback stopped after {}", util::format_time(self.uptime));
         Ok(msg)
     }
 }

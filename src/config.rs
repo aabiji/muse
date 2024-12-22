@@ -1,16 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+use crate::util::home_path;
 
 const AUDIO_FOLDER: &str = "Music";
 const CONFIG_FILE: &str = ".muse.conf";
-
-fn home_path(entry: &str) -> String {
-    let home_directory = home::home_dir().unwrap();
-    let mut base = PathBuf::from(home_directory);
-    base.push(entry);
-    base.to_str().unwrap().to_string()
-}
 
 #[derive(Serialize, Deserialize)]
 pub enum PlaybackOrder {
@@ -37,13 +32,18 @@ impl Config {
     }
 
     pub fn clamp_seek_start(&mut self, duration: u64, total_duration: u64) {
+        // No need to set a start point if we won't need it
+        if !self.resume_playback {
+            self.start_point = 0;
+            return;
+        }
+
         self.start_point += duration;
         if self.start_point >= total_duration {
             self.start_point %= total_duration;
         }
     }
 }
-
 
 pub fn save(config: &Config) {
     let serialized = toml::to_string(config).unwrap();
