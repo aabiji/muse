@@ -79,11 +79,12 @@ impl Playback {
             self.read_tracks(&Path::new(&path));
         }
 
-        let order = &self.config.as_ref().unwrap().playback_order;
-        match order {
-            config::PlaybackOrder::Alphabetical => self.tracks.sort_by_key(|t| t.path.clone()),
-            config::PlaybackOrder::Random => self.tracks.shuffle(&mut thread_rng()),
-        };
+        let randomize = self.config.as_ref().unwrap().randomize_tracks.unwrap();
+        if randomize {
+            self.tracks.shuffle(&mut thread_rng());
+        } else {
+            self.tracks.sort_by_key(|t| t.path.clone());
+        }
     }
 
     fn read_tracks(&mut self, directory: &Path) {

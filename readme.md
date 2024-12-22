@@ -30,9 +30,8 @@ at `~/.muse.conf`. Here's all the possible options:
 # search each directory path for audio files.
 audio_directories = ["/path/to/audio_directory"]
 
-# The order in which the audio files are played
-# Can be either "Random" or "Alphabetical".
-playback_order = "Random"
+# Should audio files be played at random?
+randomize_tracks = true
 
 # Resume playback from where you left off?
 resume_playback = true

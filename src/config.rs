@@ -17,8 +17,11 @@ pub enum PlaybackOrder {
 pub struct Config {
     pub start_point: u64,
     pub resume_playback: bool,
-    pub playback_order: PlaybackOrder,
     pub audio_directories: Vec<String>,
+
+    // NOTE: playback_order is deprecated and randomize_tracks should be used instead
+    pub randomize_tracks: Option<bool>,
+    pub playback_order: Option<PlaybackOrder>,
 }
 
 impl Config {
@@ -26,8 +29,9 @@ impl Config {
         Config {
             start_point: 0,
             resume_playback: true,
-            playback_order: PlaybackOrder::Random,
             audio_directories: vec![home_path(AUDIO_FOLDER)],
+            randomize_tracks: Some(true),
+            playback_order: None,
         }
     }
 
@@ -50,20 +54,19 @@ pub fn save(config: &Config) {
     std::fs::write(home_path(CONFIG_FILE), serialized).unwrap();
 }
 
-pub fn load() -> Result<Config, Box<dyn Error>> {
-    // Create the config file if it doesn't already exist
-    let path = home_path(CONFIG_FILE);
-    if !Path::new(&path).exists() {
-        let default = Config::new();
-        save(&default);
-        return Ok(default);
+fn validate_config(mut config: Config) -> Result<Config, Box<dyn Error>> {
+    // Use randomize_tracks if playback_order is being used
+    if let Some(order) = &config.playback_order {
+        if let PlaybackOrder::Alphabetical = order {
+            config.randomize_tracks = Some(false);
+        } else {
+            config.randomize_tracks = Some(true);
+        }
+        config.playback_order = None;
     }
 
-    let file = std::fs::read_to_string(path)?;
-    let mut config: Config = toml::from_str(&file)?;
-
     // Since the track ordering is random we can't have a point of reference
-    if let PlaybackOrder::Random = config.playback_order {
+    if let Some(true) = config.randomize_tracks {
         config.resume_playback = false;
     }
 
@@ -84,4 +87,18 @@ pub fn load() -> Result<Config, Box<dyn Error>> {
     }
 
     Ok(config)
+}
+
+pub fn load() -> Result<Config, Box<dyn Error>> {
+    // Create the config file if it doesn't already exist
+    let path = home_path(CONFIG_FILE);
+    if !Path::new(&path).exists() {
+        let default = Config::new();
+        save(&default);
+        return Ok(default);
+    }
+
+    let file = std::fs::read_to_string(path)?;
+    let config: Config = toml::from_str(&file)?;
+    validate_config(config)
 }
