@@ -62,6 +62,11 @@ pub fn load() -> Result<Config, Box<dyn Error>> {
     let file = std::fs::read_to_string(path)?;
     let mut config: Config = toml::from_str(&file)?;
 
+    // Since the track ordering is random we can't have a point of reference
+    if let PlaybackOrder::Random = config.playback_order {
+        config.resume_playback = false;
+    }
+
     if !config.resume_playback {
         config.start_point = 0;
     }

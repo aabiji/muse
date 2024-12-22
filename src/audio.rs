@@ -7,6 +7,9 @@ use std::time::{Duration, SystemTime};
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
+use rand::thread_rng;
+use rand::seq::SliceRandom;
+
 use crate::util;
 use crate::config;
 
@@ -76,12 +79,10 @@ impl Playback {
             self.read_tracks(&Path::new(&path));
         }
 
-        // Sort tracks if necessary
-        // TODO: randomize tracks
         let order = &self.config.as_ref().unwrap().playback_order;
         match order {
             config::PlaybackOrder::Alphabetical => self.tracks.sort_by_key(|t| t.path.clone()),
-            config::PlaybackOrder::Random => {}
+            config::PlaybackOrder::Random => self.tracks.shuffle(&mut thread_rng()),
         };
     }
 
@@ -173,8 +174,7 @@ impl Playback {
         self.init()?;
 
         if !self.sink.lock().unwrap().empty() && !self.sink.lock().unwrap().is_paused() {
-            // TODO: we shouldn't shut down here
-            return Err(String::from("Audio is already playing."));
+            return Ok(String::from("Audio is already playing."));
         }
 
         self.start_time = SystemTime::now();
