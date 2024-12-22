@@ -13,11 +13,8 @@ sudo dnf install alsa-lib-devel
 # Debian based distro
 sudo apt install libasound2-dev
 
-# 2. Install:
-
-git clone https://github.com/aabiji/muse
-cd muse && cargo build --release
-sudo mv target/release/muse /usr/bin/muse
+# 2. Install muse:
+cargo install --git https://github.com/aabiji/muse
 ```
 
 ### Config

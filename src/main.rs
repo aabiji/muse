@@ -9,13 +9,13 @@ use clap::Parser;
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: ipc::Request,
+    command: ipc::Command,
 }
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        ipc::Request::Start => {
+        ipc::Command::Start => {
             let mut server = ipc::Server::new();
             server.run();
         }

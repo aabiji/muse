@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::process::{exit, Command};
+use std::process::{exit, Stdio, Command as ProcessCommand};
 
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use crate::audio::Playback;
 pub const ADDR: &str = "127.0.0.1:1234";
 
 #[derive(PartialEq, Subcommand, Serialize, Deserialize)]
-pub enum Request {
+pub enum Command {
     /// Play audio
     Play,
     /// Pause audio
@@ -23,6 +23,8 @@ pub enum Request {
     /// Stop audio.
     // Stop the playback server
     Stop,
+    /// Upgrade to the latest version of muse
+    Update,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -69,12 +71,12 @@ impl Server {
     fn handle_request(&mut self, mut stream: TcpStream) -> bool {
         let mut shutdown = false;
         let buffer = read_data(&mut stream);
-        let request: Request = serde_json::from_slice(&buffer).unwrap();
+        let request: Command = serde_json::from_slice(&buffer).unwrap();
 
         let result = match request {
-            Request::Play => self.playback.play(),
-            Request::Pause => self.playback.pause(),
-            Request::Stop => {
+            Command::Play => self.playback.play(),
+            Command::Pause => self.playback.pause(),
+            Command::Stop => {
                 shutdown = true;
                 self.playback.stop(true)
             }
@@ -127,7 +129,7 @@ impl Server {
 
         let exe_path = std::env::current_exe().unwrap();
         let path = exe_path.to_str().unwrap();
-        Command::new(path).arg("start").spawn().unwrap();
+        ProcessCommand::new(path).arg("start").spawn().unwrap();
 
         // Wait for the server process to start and initialize.
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -139,7 +141,7 @@ impl Server {
 pub struct Client;
 
 impl Client {
-    fn send_request(&self, r: Request) -> Response {
+    fn send_request(&self, r: Command) -> Response {
         let mut stream = TcpStream::connect(ADDR).unwrap();
 
         let mut data: Vec<u8> = Vec::new();
@@ -153,15 +155,36 @@ impl Client {
         response
     }
 
-    pub fn run(&mut self, request: Request) {
-        if !Server::is_running() && request == Request::Stop {
+    // Install the latest version of this binary
+    fn update(&self) {
+        let status = ProcessCommand::new("cargo")
+            .args(["install", "--git", "https://github.com/aabiji/muse"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        if !status.success() {
+            let msg = String::from("Something went wrong, couldn't update");
+            util::log(msg, util::LogType::Error);
+            return;
+        }
+        util::log(String::from("Updated muse!"), util::LogType::Info);
+    }
+
+    pub fn run(&mut self, command: Command) {
+        if !Server::is_running() && command == Command::Stop {
             util::log("No audio server is running".to_string(), util::LogType::Error);
+            return;
+        }
+
+        if command == Command::Update {
+            self.update();
             return;
         }
 
         Server::spawn_background_process();
 
-        match self.send_request(request) {
+        match self.send_request(command) {
             Response::Success(msg) => util::log(msg, util::LogType::Info),
             Response::Error(msg) => util::log(msg, util::LogType::Error),
         };
