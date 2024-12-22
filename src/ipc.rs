@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::process::{exit, Stdio, Command as ProcessCommand};
+use std::process::{exit, Command as ProcessCommand, Stdio};
 
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
@@ -14,17 +14,24 @@ pub const ADDR: &str = "127.0.0.1:1234";
 pub enum Command {
     /// Play audio
     Play,
+
     /// Pause audio
     Pause,
+
+    /// Stop audio.
+    // Stop the playback server
+    Stop,
+
+    /// Upgrade to the latest version of muse
+    Update,
+
+    /// Download an mp3 file from the specified url
+    Download { url: String },
+
     /// Start the playback server.
     // The process will hang until
     // the server is shutdown
     Start,
-    /// Stop audio.
-    // Stop the playback server
-    Stop,
-    /// Upgrade to the latest version of muse
-    Update,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -171,22 +178,42 @@ impl Client {
         util::log(String::from("Updated muse!"), util::LogType::Info);
     }
 
+    // Download an mp3 file using the supplied url into the default audio directory
+    fn download(&self, url: &str) {
+        let output_path = "~/Music/%(title)s.%(ext)s";
+        let result = ProcessCommand::new("yt-dlp")
+            .args([url, "-x", "--audio-format", "mp3", "-o", output_path])
+            .status();
+        match result {
+            Ok(status) => {
+                if status.success() {
+                    println!("Done!");
+                }
+            }
+            Err(_) => {
+                let msg = "To use this feature you must have yt-dlp and ffmpeg installed";
+                util::log(String::from(msg), util::LogType::Error);
+            }
+        }
+    }
+
     pub fn run(&mut self, command: Command) {
         if !Server::is_running() && command == Command::Stop {
             util::log("No audio server is running".to_string(), util::LogType::Error);
             return;
         }
 
-        if command == Command::Update {
-            self.update();
-            return;
-        }
+        match command {
+            Command::Update => self.update(),
+            Command::Download { url } => self.download(&url),
+            _ => {
+                Server::spawn_background_process();
 
-        Server::spawn_background_process();
-
-        match self.send_request(command) {
-            Response::Success(msg) => util::log(msg, util::LogType::Info),
-            Response::Error(msg) => util::log(msg, util::LogType::Error),
+                match self.send_request(command) {
+                    Response::Success(msg) => util::log(msg, util::LogType::Info),
+                    Response::Error(msg) => util::log(msg, util::LogType::Error),
+                };
+            }
         };
     }
 }
