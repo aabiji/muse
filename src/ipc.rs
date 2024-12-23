@@ -5,8 +5,8 @@ use std::process::{exit, Command as ProcessCommand, Stdio};
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
-use crate::util;
 use crate::audio::Playback;
+use crate::util;
 
 pub const ADDR: &str = "127.0.0.1:1234";
 
@@ -109,7 +109,10 @@ impl Server {
 
     pub fn run(&mut self) {
         if Server::is_running() {
-            util::log("Audio server is already running".to_string(), util::LogType::Error);
+            util::log(
+                "Audio server is already running".to_string(),
+                util::LogType::Error,
+            );
             exit(1);
         }
 
@@ -199,7 +202,10 @@ impl Client {
 
     pub fn run(&mut self, command: Command) {
         if !Server::is_running() && command == Command::Stop {
-            util::log("No audio server is running".to_string(), util::LogType::Error);
+            util::log(
+                "No audio server is running".to_string(),
+                util::LogType::Error,
+            );
             return;
         }
 

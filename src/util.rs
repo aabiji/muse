@@ -1,5 +1,5 @@
-use std::time::Duration;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 pub enum LogType {
     Info,
@@ -23,9 +23,15 @@ pub fn format_time(d: Duration) -> String {
     let hours = (total / 60 / 60) % 60;
 
     let mut time = String::new();
-    if hours > 0 { time.push_str(&format!("{hours}h ")); }
-    if minutes > 0 { time.push_str(&format!("{minutes}m ")); }
-    if seconds > 0 { time.push_str(&format!("{seconds}s")); }
+    if hours > 0 {
+        time.push_str(&format!("{hours}h "));
+    }
+    if minutes > 0 {
+        time.push_str(&format!("{minutes}m "));
+    }
+    if seconds > 0 {
+        time.push_str(&format!("{seconds}s"));
+    }
     time
 }
 

@@ -7,11 +7,11 @@ use std::time::{Duration, SystemTime};
 use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
-use rand::thread_rng;
 use rand::seq::SliceRandom;
+use rand::thread_rng;
 
-use crate::util;
 use crate::config;
+use crate::util;
 
 #[derive(Clone)]
 struct Track {
