@@ -207,6 +207,10 @@ impl Playback {
 
         let elapsed = self.start_time.elapsed().unwrap();
         self.uptime += elapsed;
+        if let Some(config) = &mut self.config {
+            config.clamp_seek_start(self.uptime.as_secs(), self.tracks_duration);
+            config::save(&config);
+        }
 
         self.sink.lock().unwrap().pause();
         let msg = format!(
@@ -222,7 +226,6 @@ impl Playback {
 
         let elapsed = self.start_time.elapsed().unwrap();
         self.uptime += elapsed;
-
         if let Some(config) = &mut self.config {
             if save_config {
                 config.clamp_seek_start(self.uptime.as_secs(), self.tracks_duration);
