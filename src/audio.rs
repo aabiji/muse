@@ -13,12 +13,6 @@ use rand::thread_rng;
 use crate::config;
 use crate::util;
 
-#[derive(Clone)]
-struct Track {
-    path: PathBuf,
-    duration: Duration,
-}
-
 pub struct Playback {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
@@ -29,9 +23,9 @@ pub struct Playback {
     start_time: SystemTime,
     uptime: Duration,
 
-    tracks: Vec<Track>,
-    tracks_duration: u64,
+    tracks: Vec<PathBuf>,
     current_track: Arc<Mutex<usize>>,
+    total_duration: u64,
 }
 
 impl Playback {
@@ -49,8 +43,8 @@ impl Playback {
             uptime: Duration::new(0, 0),
 
             tracks: Vec::new(),
-            tracks_duration: 0,
             current_track: Arc::new(Mutex::new(0)),
+            total_duration: 0,
         }
     }
 
@@ -83,8 +77,10 @@ impl Playback {
         if randomize {
             self.tracks.shuffle(&mut thread_rng());
         } else {
-            self.tracks.sort_by_key(|t| t.path.clone());
+            self.tracks.sort_by_key(|path| path.clone());
         }
+
+        self.determine_starting_track();
     }
 
     fn read_tracks(&mut self, directory: &Path) {
@@ -101,74 +97,94 @@ impl Playback {
                 continue;
             }
 
-            let warning = format!(
-                "Couldn't load {}. {} files are not supported.",
-                path.to_str().unwrap(),
-                path.extension().unwrap().to_str().unwrap()
-            );
+            let warning = format!("Couldn't load {}", path.to_str().unwrap());
 
             if !util::is_supported_codec(&path) {
                 util::log(warning, util::LogType::Warning);
                 continue;
             }
 
-            let result = lofty::read_from_path(&path);
-            match result {
-                Err(_) => {
-                    util::log(warning, util::LogType::Warning);
-                    continue;
-                }
-                Ok(tags) => {
-                    let duration = tags.properties().duration();
-                    self.tracks.push(Track { path, duration });
-                    self.tracks_duration += duration.as_secs();
-                }
-            };
+            if let Err(_) = lofty::read_from_path(&path) {
+                util::log(warning, util::LogType::Warning);
+                continue;
+            }
+
+            self.tracks.push(path);
         }
     }
 
-    fn play_track(sink: &mut Arc<Mutex<Sink>>, path: &PathBuf, starting_point: Duration) {
-        let file = File::open(path).unwrap();
-        let reader = BufReader::new(file);
+    fn determine_starting_track(&mut self) {
+        // Get the duration of all the tracks
+        let mut durations = Vec::new();
+        for path in self.tracks.clone() {
+            let tags = lofty::read_from_path(&path).unwrap();
+            let duration = tags.properties().duration().as_secs();
+            self.total_duration += duration;
+            durations.push(duration);
+        }
 
-        let source = Decoder::new(reader).unwrap();
-        let source = source.skip_duration(starting_point);
-
-        sink.lock().unwrap().append(source);
-        sink.lock().unwrap().play();
+        // Find the track that the start point is situated in
+        let mut index = self.current_track.lock().unwrap();
+        let mut start = self.config.as_ref().unwrap().start_point;
+        while start > durations[*index] {
+            start -= durations[*index];
+            *index += 1;
+            if *index > durations.len() {
+                *index = 0;
+            }
+        }
+        self.config.as_mut().unwrap().start_point = start;
     }
 
     fn play_tracks(
-        mut sink: Arc<Mutex<Sink>>,
-        tracks: Vec<Track>,
-        mut start: Duration,
+        sink: Arc<Mutex<Sink>>,
+        tracks: Vec<PathBuf>,
+        mut initial_start: Duration,
         current_track: Arc<Mutex<usize>>,
     ) {
         loop {
+            // Continue playing
             if !sink.lock().unwrap().empty() {
                 std::thread::sleep(Duration::from_secs(5));
                 continue;
             }
 
+            // Start playing the next track
             let mut index = current_track.lock().unwrap();
-            let track = &tracks[*index];
-            if start < track.duration {
-                Playback::play_track(&mut sink, &track.path, start);
-            }
+            let path = &tracks[*index];
 
-            start = start.saturating_sub(track.duration);
+            let file = File::open(path).unwrap();
+            let reader = BufReader::new(file);
 
+            let source = Decoder::new(reader).unwrap();
+            let source = source.skip_duration(initial_start);
+
+            sink.lock().unwrap().append(source);
+            sink.lock().unwrap().play();
+
+            // Move on to the next track
             *index += 1;
             if *index == tracks.len() {
                 *index = 0;
             }
+            initial_start = Duration::new(0, 0);
         }
     }
 
     fn get_current_track(&self) -> String {
-        let pathbuf = &self.tracks[*self.current_track.lock().unwrap()].path;
+        let pathbuf = &self.tracks[*self.current_track.lock().unwrap()];
         let path = pathbuf.file_name().unwrap().to_str().unwrap();
         path.to_string()
+    }
+
+    fn cache_elapsed_time(&mut self) {
+        let elapsed = self.start_time.elapsed().unwrap();
+        self.uptime += elapsed;
+
+        if let Some(config) = &mut self.config {
+            config.clamp_seek_start(self.uptime.as_secs(), self.total_duration);
+            config::save(&config);
+        }
     }
 
     pub fn play(&mut self) -> Result<String, String> {
@@ -205,14 +221,9 @@ impl Playback {
             return Err(String::from("No audio is playing."));
         }
 
-        let elapsed = self.start_time.elapsed().unwrap();
-        self.uptime += elapsed;
-        if let Some(config) = &mut self.config {
-            config.clamp_seek_start(self.uptime.as_secs(), self.tracks_duration);
-            config::save(&config);
-        }
-
+        self.cache_elapsed_time();
         self.sink.lock().unwrap().pause();
+
         let msg = format!(
             "Pausing {} after {}",
             self.get_current_track(),
@@ -223,14 +234,8 @@ impl Playback {
 
     pub fn stop(&mut self, save_config: bool) -> Result<String, String> {
         self.sink.lock().unwrap().stop();
-
-        let elapsed = self.start_time.elapsed().unwrap();
-        self.uptime += elapsed;
-        if let Some(config) = &mut self.config {
-            if save_config {
-                config.clamp_seek_start(self.uptime.as_secs(), self.tracks_duration);
-                config::save(&config);
-            }
+        if save_config {
+            self.cache_elapsed_time();
         }
 
         let msg = format!("Playback stopped after {}", util::format_time(self.uptime));
