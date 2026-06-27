@@ -8,7 +8,7 @@ use lofty::AudioFile;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::rng;
 
 use crate::config;
 use crate::util;
@@ -57,17 +57,12 @@ impl Playback {
         if let Err(err) = result {
             return Err(err.to_string());
         }
+
         self.config = Some(result.unwrap());
-
-        self.load_tracks();
-        if self.tracks.len() == 0 {
-            return Err(String::from("Couldn't read any audio files"));
-        }
-
-        Ok(String::new())
+        self.load_tracks()
     }
 
-    fn load_tracks(&mut self) {
+    fn load_tracks(&mut self) -> Result<String, String> {
         let directories = self.config.as_ref().unwrap().audio_directories.clone();
         for path in directories {
             self.read_tracks(&Path::new(&path));
@@ -75,12 +70,17 @@ impl Playback {
 
         let randomize = self.config.as_ref().unwrap().randomize_tracks.unwrap();
         if randomize {
-            self.tracks.shuffle(&mut thread_rng());
+            self.tracks.shuffle(&mut rng());
         } else {
             self.tracks.sort_by_key(|path| path.clone());
         }
 
+        if self.tracks.len() == 0 {
+            return Err(String::from("Couldn't read any audio files"));
+        }
+
         self.determine_starting_track();
+        Ok(String::new())
     }
 
     fn read_tracks(&mut self, directory: &Path) {
